@@ -24,6 +24,7 @@ packages <- c(
               "scales",
               "naniar",
               "lubridate",
+              "googleway",
               "sf",
               "sp",
               "ggplot2",
@@ -42,6 +43,10 @@ packages <- c(
               )
 lapply(packages, library, character.only = T)
 options(dplyr.summarise.inform = F)
+
+##API
+key <- "AIzaSyCztwSCIHyEKP_uyjPrdZKf3jgZFA-XV1Y"
+set_key(key=key)
 
 ## Local Paths 
 setwd("~/Projects/seattle911")
@@ -351,15 +356,15 @@ This aggregation strategy reduced the number of categories to 153. Traffic relat
 
 ```{r final case descriptions export}
 # Write Final Case Description Data Frames to Excel Workbook
-case_descriptions_workbook <- createWorkbook()
-
-addWorksheet(case_descriptions_workbook, sheetName="full_final_desc")
-addWorksheet(case_descriptions_workbook, sheetName="first_final_desc")
-addWorksheet(case_descriptions_workbook, sheetName="second_final_desc")
-
-writeData(case_descriptions_workbook, "full_final_desc", case_type_final_desc)
-writeData(case_descriptions_workbook, "first_final_desc", case_type_final_before_dash)
-writeData(case_descriptions_workbook, "second_final_desc", case_type_final_after_dash)
+# case_descriptions_workbook <- createWorkbook()
+# 
+# addWorksheet(case_descriptions_workbook, sheetName="full_final_desc")
+# addWorksheet(case_descriptions_workbook, sheetName="first_final_desc")
+# addWorksheet(case_descriptions_workbook, sheetName="second_final_desc")
+# 
+# writeData(case_descriptions_workbook, "full_final_desc", case_type_final_desc)
+# writeData(case_descriptions_workbook, "first_final_desc", case_type_final_before_dash)
+# writeData(case_descriptions_workbook, "second_final_desc", case_type_final_after_dash)
 
 ```
 
@@ -430,17 +435,17 @@ Aggregating reduced the number of descriptions down to 125. The top four descrip
 
 ```{r initial case descriptions export}
 # Write Initial Case Description Data Frames to Excel Workbook & Export
-addWorksheet(case_descriptions_workbook, sheetName="full_init_desc")
-addWorksheet(case_descriptions_workbook, sheetName="first_init_desc")
-addWorksheet(case_descriptions_workbook, sheetName="second_init_desc")
-
-writeData(case_descriptions_workbook, "full_init_desc", case_type_init_desc)
-writeData(case_descriptions_workbook, "first_init_desc", case_type_init_before_dash)
-writeData(case_descriptions_workbook, "second_init_desc", case_type_init_after_dash)
-
-saveWorkbook(case_descriptions_workbook,
-             file= "CAD19_case_descriptions.xlsx",
-             overwrite = T)
+# addWorksheet(case_descriptions_workbook, sheetName="full_init_desc")
+# addWorksheet(case_descriptions_workbook, sheetName="first_init_desc")
+# addWorksheet(case_descriptions_workbook, sheetName="second_init_desc")
+# 
+# writeData(case_descriptions_workbook, "full_init_desc", case_type_init_desc)
+# writeData(case_descriptions_workbook, "first_init_desc", case_type_init_before_dash)
+# writeData(case_descriptions_workbook, "second_init_desc", case_type_init_after_dash)
+# 
+# saveWorkbook(case_descriptions_workbook,
+#              file= "CAD19_case_descriptions.xlsx",
+#              overwrite = T)
 
 ```
 
@@ -767,19 +772,23 @@ cad_valid_coords <- cad %>%
   filter(Dispatch_Blurred_Longitude <-121 & Dispatch_Blurred_Latitude > 46) 
 
 # seattle_base <- get_googlemap(
-#    "Seattle, Washington",
-#    zoom = 11,
-#    scale = 2,
-#    maptype = "roadmap")
-
-# seattle_points <- ggmap(seattle_base, extent ="panel") + 
-#   geom_point(data = cad_valid_coords, aes(x=Dispatch_Blurred_Longitude, y=Dispatch_Blurred_Latitude), size = 0.1, alpha = 0.05) + 
+#     "Seattle, Washington",
+#     zoom = 11,
+#     scale = 2,
+#     maptype = "roadmap")
+# 
+# seattle_points <- ggmap(seattle_base, extent ="panel") +
+#   geom_point(data = cad_valid_coords, aes(x=Dispatch_Blurred_Longitude, y=Dispatch_Blurred_Latitude), size = 0.1, alpha = 0.05) +
 #    # coord_equal() +
-#   xlab('Longitude') + 
-#   ylab('Latitude') + 
+#   xlab('Longitude') +
+#   ylab('Latitude') +
 #   ggtitle("911 Events in 2019", subtitle="Seattle, WA")
 # 
-# ggsave(filename="seattle_points.jpeg", plot=seattle_points, width=6, height=6, units = "in")
+# ggsave(filename="seattle_points.jpeg",
+#        plot=seattle_points,
+#        width=6,
+#        height=6,
+#        units = "in")
 
 ```
 
