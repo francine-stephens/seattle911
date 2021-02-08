@@ -15,7 +15,7 @@ output:
 This web report includes descriptive statistics of the Seattle 911 CAD data. The report starts with an overall summary of the structure of the dataset and then steps through each variable in the dataset.
 
 ```{r setup, include=F, warning=F, message=F}
-knitr::opts_chunk$set(echo=T)
+knitr::opts_chunk$set(echo=F)
 
 ## Libraries
 options(tidyverse.quiet = T)
@@ -32,6 +32,7 @@ packages <- c(
               "raster",
               "spatstat",
               "plotly",
+              "KernSmooth",
               "tigris",
               "leaflet",
               "RColorBrewer", 
@@ -48,10 +49,6 @@ wd <- getwd()
 shp_path <- "/shp"
 precs_path <- "/Spd_Precincts/"
 
-## API
-register_google(key = "AIzaSyCztwSCIHyEKP_uyjPrdZKf3jgZFA-XV1Y",
-                write = T)
-
 ```
 
 ## Dataset Description
@@ -59,25 +56,28 @@ register_google(key = "AIzaSyCztwSCIHyEKP_uyjPrdZKf3jgZFA-XV1Y",
 Let's start by identifying the dimensions in the dataset. 
 ```{r data import, warning=F, message=F}
 ## Import Data & Set Variable Names + Types
-cad <- 
-  read_csv("2019 CAD Data.csv", 
-           col_types = cols(.default = "f", 
-                            `CAD Event ID` = "d",
-                            `Event First Dispatch Time (ATTR)` = "c",
-                            `Dispatch Address` = "c",
-                            `Officer Serial Num` = "c",
-                            `Squad Desc` = "c",
-                            `Dispatch Blurred Latitude` = "d",
-                            `Dispatch Blurred Longitude` = "d",
-                            `CAD Event Response Time (Seconds) (SUM)` = "d",
-                            `Total Service Time (Seconds) (SUM)` = "d")
-           )
 
-cad <- cad %>% 
-  select_all(funs(gsub(" ", "_", .))) %>%
-  select_all(funs(gsub("[()]", "", .)))
-saveRDS(cad, "cad_2019_data.rds")
+  ## To speed up import, data were saved as R object and imported that way. 
+# cad <- 
+#   read_csv("2019 CAD Data.csv", 
+#            col_types = cols(.default = "f", 
+#                             `CAD Event ID` = "d",
+#                             `Event First Dispatch Time (ATTR)` = "c",
+#                             `Dispatch Address` = "c",
+#                             `Officer Serial Num` = "c",
+#                             `Squad Desc` = "c",
+#                             `Dispatch Blurred Latitude` = "d",
+#                             `Dispatch Blurred Longitude` = "d",
+#                             `CAD Event Response Time (Seconds) (SUM)` = "d",
+#                             `Total Service Time (Seconds) (SUM)` = "d")
+#            )
+# 
+# cad <- cad %>% 
+#   select_all(funs(gsub(" ", "_", .))) %>%
+#   select_all(funs(gsub("[()]", "", .)))
+# saveRDS(cad, "cad_2019_data.rds")
 
+cad <- readRDS("cad_2019_data.rds")
 ## Number of events & variables
 dim(cad)
 ```
@@ -173,7 +173,7 @@ knitr::kable(cad %>%
 
 On average, there were 2,061 events per day in 2019. With the exception of the 76 event day on November 14th, there is not much skewedness in the distribution of events throughout the year. 
 
-```{r summary events}
+```{r summary events, warning=F, message=F}
 knitr::kable(cad %>%
   group_by(event_date) %>%
   summarize(freq = n()) %>%
@@ -282,8 +282,7 @@ knitr::kable(cad %>%
 
 **Questions**
 1) Is the plan to focus solely on 911 call types? (If so, the below questions are not relevant.)
-2) What is the difference between Onview and Proactive(Officer Iniatied)? Is it possible that these two types would be worth combining?
-3) Bivariate/Spatial relationships may be interesting to investigate, e.g., Are Onview and Proactive types more common in certain neighborhoods? Where are other telephone, not 911 calls most prevalent? What case types are most prevalent among the four least common call types?
+2) What is the difference between Onview and Proactive(Officer Initiated)? Is it possible that these two types would be worth combining?
 
 
 ## Case Type Final Description
@@ -751,9 +750,10 @@ With the parsed by period version of service time, we see that the upper end of 
 
 ## Spatial Object
 
-Before transforming the dataframe into a spatial object, the calls with missing or invalid coordinates need to be removed. After filtering those calls out, the transformed spatial object contains 675,664 call locations. In total there are 76,757 events that do not have valid coordinates. 
+Before transforming the dataframe into a spatial object, the events with missing or invalid coordinates need to be removed. After filtering those events out, the transformed spatial object contains 675,664 locations. In total there are 76,757 events that do not have valid coordinates. Mapping all of these events as points results in over-plotting as shown below.
 
-```{r spatial object}
+
+```{r spatial object, warning=F, message=F}
 ## Transform to Spatial Object
 cad_sf <- cad %>% 
   filter(Dispatch_Blurred_Longitude <-121 & Dispatch_Blurred_Latitude > 46) %>%  
@@ -761,19 +761,96 @@ cad_sf <- cad %>%
            crs=4326)
 ```
 
-Mapping all of these calls as points would result in over-plotting. There are other approaches for visualizations that would be more informative. One approach is to aggregate the points to meaningful geographic units like zipcodes or neighborhoods. Another approach is to create a point density map to show where the highest and lowest number of events per area occurred in the city. The following sections demonstrate these approaches.
+```{r point mapping}
+## Build point map
+cad_valid_coords <- cad %>%
+  filter(Dispatch_Blurred_Longitude <-121 & Dispatch_Blurred_Latitude > 46) 
 
-Let's start by visualizing the frequency of events in different geographic regions of Seattle. In one of the prior sections, I showed the frequency of events per precinct. However, approximately 5,000 of the calls did not have a precinct listed. Now that the dataframe has been transformed to a spatial object, I can identify a precinct for those locations based on which precinct each coordinate pair lies within. 
+# seattle_base <- get_googlemap(
+#    "Seattle, Washington",
+#    zoom = 11,
+#    scale = 2,
+#    maptype = "roadmap")
+
+# seattle_points <- ggmap(seattle_base, extent ="panel") + 
+#   geom_point(data = cad_valid_coords, aes(x=Dispatch_Blurred_Longitude, y=Dispatch_Blurred_Latitude), size = 0.1, alpha = 0.05) + 
+#    # coord_equal() +
+#   xlab('Longitude') + 
+#   ylab('Latitude') + 
+#   ggtitle("911 Events in 2019", subtitle="Seattle, WA")
+# 
+# ggsave(filename="seattle_points.jpeg", plot=seattle_points, width=6, height=6, units = "in")
+
+```
+
+```{r overplotted map, echo=F, out.width = '90%'}
+knitr::include_graphics("seattle_points.jpeg")
+
+```
+
+There are other approaches for visualizations that would be more informative. One approach is to create a point density map to show where the highest and lowest number of events per area occurred in the city. Another approach is to aggregate the points to meaningful geographic units like zipcodes or neighborhoods. The following sections demonstrate these approaches.
+
+## Point Density Mapping
+
+This interactive map clusters the points that are proximate. Zoom into different parts of the city to where clusters tend to occur. 
+```{r points leaflet, warning=F, message=F}
+## Interactive Map of all points
+leaflet(cad_sf) %>% 
+  addTiles() %>% addMarkers(
+  clusterOptions = markerClusterOptions()
+) 
+
+```
+
+```{r make contour lines, warning=F, message=F}
+## KDE CONTOURS
+cad_coords <- matrix(unlist(cad_sf$geometry), ncol = 2, byrow =T)
+
+kde <- bkde2D(cad_coords,
+              bandwidth=c(.0038, .0058), gridsize = c(100,100))
+CL <- contourLines(kde$x1 , kde$x2 , kde$fhat)
+
+## EXTRACT CONTOUR LINE LEVELS
+LEVS <- as.factor(sapply(CL, `[[`, "level"))
+NLEV <- length(levels(LEVS))
+
+## CONVERT CONTOUR LINES TO POLYGONS
+pgons <- lapply(1:length(CL), function(i)
+    Polygons(list(Polygon(cbind(CL[[i]]$x, CL[[i]]$y))), ID=i))
+spgons = SpatialPolygons(pgons)
+
+```
+
+**Smoothed Point Density Map**
+
+The interactive map below shows the areas with high density of calls. Only areas with statistically significant densities are mapped. Highest density areas are in yellow and lowest are red. 
+```{r leaflet of stat dens, warning=F, message=F}
+## Leaflet of Hotspots
+leaflet(spgons) %>%
+  addTiles() %>%
+  addPolygons(color = heat.colors(NLEV, NULL)[LEVS])
+
+```
+
+
 
 ## Precinct Aggregation & Mapping
-```{r events per precinct}
+
+Now, let's turn to by visualizing the frequency of events in different geographic regions of Seattle. In one of the prior sections, I showed the frequency of events per precinct. However, approximately 5,000 of the calls did not have a precinct listed. Now that the dataframe has been transformed to a spatial object, I can identify a precinct for those locations based on which precinct each coordinate pair lies within. 
+
+```{r events per precinct, include=F, warning=F, message=F}
 ## Geoprocess precincts
 precincts_sf <- st_read(paste0(wd,
                                shp_path, 
                                precs_path, 
-                          "geo_export_8e9605ae-b15a-49cc-bcbd-73d6fabe122e.shp")
+                          "geo_export_8e9605ae-b15a-49cc-bcbd-73d6fabe122e.shp"),
+                        quiet=F
                         )
 
+```
+
+```{r table precincts, warning=F, message=F}
+## Geoprocess precincts
 precincts_sf <- precincts_sf %>%
     st_transform(., crs = st_crs(cad_sf))
  
@@ -808,10 +885,10 @@ knitr::kable(events_per_precinct %>%
 
 A couple of things standout from using the spatial overlay approach to assign precincts. First, the number of points that are not assigned to a precinct decreased from approximately 5,000 to 2,196. The reason these points are not assigned is because they lie outside of the precinct boundaries. 
 
-However, what is also noteworthy is that the number of events per precinct are lower than they were in the section above where I used the precinct given in the data. This indicates that the over 70,000 events that were dropped due to invalid geometries had been given precinct identifiers, but not latitude and longitudes. If we want to preserve all of these points, the best thing to do would be to keep the precincts that were provided in the original dataset and then merge in the spatial overlay precincts for the subset of events that did not have valid coordinates. Let's do that and then visualize the precincts and frequencies now.
+Notice that the number of events per precinct are lower than they were in the section above where I used the precinct given in the data. This indicates that the over 70,000 events that were dropped due to invalid geometries had been given precinct identifiers, but not latitude and longitudes. If we want to preserve all of these points, the best thing to do would be to keep the precincts that were provided in the original dataset and then merge in the spatial overlay precincts for the subset of events that did not have valid coordinates. Let's do that and then visualize the precincts and frequencies now.
 
 
-```{r calls per precinct mapped}
+```{r calls per precinct mapped, warning=F, message=F}
 ## Combine precinct assignments - Seattle PD classified & spatial overlay
 events_precincts <- cad_sf %>%
   st_set_crs(., st_crs(precincts_sf)) %>%
@@ -879,24 +956,28 @@ leaflet() %>%
     data = merged_events_per_precinct_sf,
     pal = prec_pal,
     values = ~total_events,
-    title = "Map 1: 2019 Events<br>per Precinct"
+    title = "2019 Events<br>per Precinct"
   )
 
 ```
 
 
-The map shows not only the events per precinct, but also those events that are outside of the precinct boundaries. 
+The map shows not only the events per precinct, but also those events that are outside of the precinct boundaries.
 
 ## Zipcode Aggregation & Mapping
-Another aggregation we can perform and visualize is at the zip-code level.
+Another aggregation we can perform and visualize is at the zipcode level. Zipcode boundaries were pulled from Seattle's Open Data website.
 
-```{r aggregate to zipcodes}
+```{r aggregate to zipcodes, include=F, echo=F, warning=F, message=F}
 ## Zip code aggregation
 king_zips_sf <- 
   st_read(
     "https://opendata.arcgis.com/datasets/83fc2e72903343aabff6de8cb445b81c_2.geojson"
     )
+```
 
+The table below lists the count of events per zipcode. There is a sizable range in events per zipcode from 3 to just under 70,000. The map below shows the counts per zipcode.
+
+```{r table zip, warning=F, message=F}
 ## Events per zip
 events_per_zip <- cad_sf %>%
   st_join(.,
@@ -909,7 +990,7 @@ events_per_zip <- cad_sf %>%
 events_per_zip_sf <- king_zips_sf %>%
   left_join(., events_per_zip, by = c("ZIPCODE")) %>%
   filter(!is.na(events))
-
+  
 knitr::kable(events_per_zip_sf %>%
   select(ZIPCODE, events) %>% 
     st_set_geometry(NULL) %>%
@@ -921,7 +1002,7 @@ knitr::kable(events_per_zip_sf %>%
 
 ```
 
-```{r visualize zips}
+```{r visualize zips, warning=F, message=F}
 ## Visualize 2019 events per zip
 zips_pal <- colorNumeric(
   palette = "Reds",
@@ -942,19 +1023,25 @@ leaflet() %>%
     data = events_per_zip_sf,
     pal = zips_pal,
     values = ~events,
-    title = "Map 2: 2019 Events<br>per Zipcode"
+    title = "2019 Events<br>per Zipcode"
   )
 
 ```
 
+Zipcodes in the core of the city tend to have the highest counts. The zipcodes just below the center of the city have higher counts of events than the zipcodes to the north of the city. 
+
 ## Neighborhood Aggregation & Mapping
-```{r aggregate nhoods}
+
+The Seattle Open Data website also makes neighborhood boundaries available. In the table below, the events were aggregated to the neighborhoods. This should tell us a little more than the zipcodes do about where events are most prevalent. The neighborhoods and their counts are also featured in the map below. We see that the neighborhoods in the city's core like the CBD, Broadway, Pioneer Square, and Industrial District had the highest number of events. 
+```{r aggregate nhoods, include=F, echo=F, warning=F, message=F}
 nhoods_sod_sf <- 
   st_read(
     "https://opendata.arcgis.com/datasets/b76cdd45f7b54f2a96c5e97f2dda3408_2.geojson"
     )
+```
 
-## Events per zip
+```{r nhood table, warning=F, message=F}
+## Events per neighborhood
 events_per_nhood <- cad_sf %>%
   st_join(.,
           nhoods_sod_sf,
@@ -978,7 +1065,7 @@ knitr::kable(events_per_nhood_sf %>%
 
 ```
 
-```{r nhood visualize}
+```{r nhood visualize, warning=F, message=F}
 nhoods_pal <- colorNumeric(
   palette = "Oranges",
   domain = events_per_nhood_sf$events
@@ -998,88 +1085,7 @@ leaflet() %>%
     data = events_per_nhood_sf,
     pal = nhoods_pal,
     values = ~events,
-    title = "Map 3: 2019 Events<br>per Neighborhood"
+    title = "2019 Events<br>per Neighborhood"
   )
-
-```
-
-
-## Point Density Mapping
-```{r map by call codes}
-# Create Seattle boundary and transform to sp 
-seattle_sf <- events_per_zip_sf %>%
-  mutate(city = "Seattle") %>%
-  group_by(city) %>%
-  summarize() 
-
-seattle_sp <- seattle_sf %>% 
-  st_transform(., crs=2285) %>%
-  as(., "Spatial")
-
-seattle_Owin <- as.owin(seattle_sp)
-
-
- # Load a starbucks.shp point feature shapefile
-cad_sp <- cad_sf %>%
-  st_transform(., crs=2285) %>%
-  as(., "Spatial")
-cad_ppp  <- as.ppp.SpatialPointsDataFrame(cad_sp)
-marks(cad_ppp) <- NULL
-Window(cad_ppp) <- seattle_Owin
-
-
-# rast_seattle <- raster(seattle_sp)
-# rast_seattle <- rasterize(seattle_sp, rast_seattle)
-# quads_seattle <- as(rast_seattle, 'SpatialPolygons')
-# plot(quads_seattle, add=T)
-# points(cad_sp, col='red', cex=.5)
-
-dens_cad <- density(cad_ppp)
-plot(dens_cad, main='911 Event Density, Seattle, WA 2019')
-
-
-ggplot(cad_sp, aes(x = lon, y = lat)) + 
-  coord_equal() + 
-  xlab('Longitude') + 
-  ylab('Latitude') + 
-  stat_density2d(aes(fill = ..level..), alpha = .5,
-                 geom = "polygon", data = crime) + 
-  scale_fill_viridis_c() + 
-  theme(legend.position = 'none')
-
-```
-
-```{r points}
-## Ggplot version
-ggmap(seattle_base, extent ="panel", base_layer = ggplot(cad_valid_coords, aes(x=Dispatch_Blurred_Longitude, y=Dispatch_Blurred_Latitude))) +
-  coord_equal() + 
-  xlab('Longitude') + 
-  ylab('Latitude') + 
-  stat_density2d(geom = "point",
-  aes(size = after_stat(density)),
-  contour = T) + 
-  scale_fill_viridis_c() #+ 
-  #theme(legend.position = 'none')
-    
-
-```
-
-
-```{r full points}
-seattle_base <- get_googlemap(
-  "Seattle, Washington", 
-  zoom = 11,
-  maptype = "roadmap")
-
-cad_valid_coords <- cad %>%
-  filter(Dispatch_Blurred_Longitude <-121 & Dispatch_Blurred_Latitude > 46) 
-
-
-  ggmap(seattle_base, extent ="panel") +
-  geom_point(data = cad_valid_coords, aes(x=Dispatch_Blurred_Longitude, y=Dispatch_Blurred_Latitude), size = 0.1, alpha = 0.05) + 
-    coord_equal() +
-  xlab('Longitude') + 
-  ylab('Latitude')
-
 
 ```
