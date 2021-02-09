@@ -63,9 +63,9 @@ Let's start by identifying the dimensions in the dataset.
 ## Import Data & Set Variable Names + Types
 
   ## To speed up import, data were saved as R object and imported that way. 
-# cad <- 
-#   read_csv("2019 CAD Data.csv", 
-#            col_types = cols(.default = "f", 
+# cad <-
+#   read_csv("2019 CAD Data.csv",
+#            col_types = cols(.default = "f",
 #                             `CAD Event ID` = "d",
 #                             `Event First Dispatch Time (ATTR)` = "c",
 #                             `Dispatch Address` = "c",
@@ -77,18 +77,22 @@ Let's start by identifying the dimensions in the dataset.
 #                             `Total Service Time (Seconds) (SUM)` = "d")
 #            )
 # 
-# cad <- cad %>% 
+# cad <- cad %>%
 #   select_all(funs(gsub(" ", "_", .))) %>%
-#   select_all(funs(gsub("[()]", "", .)))
+#   select_all(funs(gsub("[()]", "", .))) %>%
+#   filter(Call_Type_Desc == "911" | Call_Type_Desc == "TELEPHONE OTHER, NOT 911")
+#   
 # saveRDS(cad, "cad_2019_data.rds")
 
 cad <- readRDS("cad_2019_data.rds")
 ## Number of events & variables
 dim(cad)
+
 ```
 
-There are 752,421 events and and 17 variables in the data. The variable names from the CAD export are listed below. 
+There are 752,421 events and and 17 variables in the CAD data export. For this analysis, we narrow the focus to 911 and other telephone call types only. The reduced dataset contains **480,811 events.** 
 
+The variable names from the CAD export are listed below. 
 ```{r variables}
 ## View variable names
 names(cad)
@@ -104,7 +108,7 @@ sapply(cad[,sapply(cad, is.factor)], nlevels)
 
 **Dispatch ID** - This is some sort of identifier. It's interesting that the identifiers are not unique to each event. What does the dispatch ID identify? Is this identifier going to be relevant for our analysis? 
 
-**Call priority codes and Call type description** have a manageable number of categories - 9 and 8, respectively. After taking a deeper dive into the univariate statistics in the sections below and understanding what these categories mean, we can decide whether any of these categories should be aggregated. 
+**Call priority codes and Call type description** have a manageable number of categories - 9 and 8, respectively. *Call type has 8 possible categories, but we are only focusing on two categories - 911 and other telephone (not 911).* After taking a deeper dive into the univariate statistics in the sections below and understanding what these categories mean, we can decide whether any of these categories should be aggregated. 
 
 **Case Type Final and Case Type Initial Descriptions** - These two variables have the greatest number of categories with 343 and 235 categories, respectively. We will want to parse out the categories and see how to regroup into a smaller, more manageable set of categories for analysis. After looking over the categories we can figure out some strategies for aggregating categories. 
 
@@ -136,7 +140,7 @@ event_time_line <- cad %>%
   summarize(freq = n()) %>%
   ggplot(., aes(x=event_date, y=freq)) +
   geom_line(color="steelblue") + 
-  labs(title = "Frequency of Events in 2019", 
+  labs(title = "Frequency of Calls for Service in 2019", 
        subtitle = "Seattle, WA", 
        y = "Number of Events", 
        x = "Time") +
@@ -156,9 +160,9 @@ event_time_line %>%
 
 ```
 
-The date with the highest number of events recorded was 2,530, which was on July 13th. In general, the summer months appear to have higher frequencies that the rest of the year. 
+The date with the highest number of events recorded was 1,667, which was on July 5th. In general, the summer months appear to have higher frequencies that the rest of the year. 
 
-November 14th, 2019 is the date with the most marked decrease in events. There were only 76 events recorded on November 14th. This is far below other days with fewer events than normal, as shown in Table 1 below. *It raises the possibility of a glitch in the reporting system for that day.*
+November 14th, 2019 is the date with the most marked decrease in events. There were only 61 events recorded on November 14th. This is far below other days with fewer events than normal, as shown in Table 1 below. *It raises the possibility of a glitch in the reporting system for that day.*
 
 
 ```{r event date table, warning=F, message=F}
@@ -176,7 +180,7 @@ knitr::kable(cad %>%
 
 ```
 
-On average, there were 2,061 events per day in 2019. With the exception of the 76 event day on November 14th, there is not much skewedness in the distribution of events throughout the year. 
+On average, there were 1,317 calls for service per day in 2019. With the exception of the 76 event day on November 14th, there is not much of a skew to the distribution. 
 
 ```{r summary events, warning=F, message=F}
 knitr::kable(cad %>%
@@ -231,9 +235,9 @@ call_priority_bar %>%
 
 ```
 
-Code 2 is the most common priority code recorded with a total of 219,406 in 2019. According to Table 3,  Code 2 is about 30% of the events in 2019. Just over three-quarters of the events are categorized as being categorized as priority codes 1 through 3. 
+Code 2 is the most common priority code recorded with a total of 189,788 events. According to Table 3, Code 2 is about 40% of the events in 2019. Just over 96% of the calls for service are categorized as being categorized as priority codes 1 through 3. 
 
-Codes 6 and -1 have the fewest events. They do not show up as clearly in the graph, but in Table 3, shown below, they total to 44 and 274 events, respectively. I dug into the -1 code a little bit more and it looks like this code is applied to very specific cases. *All 274 of these events had the call type listed as Onview and had the initial case type description of "DOWN - CHECK FOR DOWN PERSON".* You can flip through the paged table below to see the events with -1 priority codes. 
+Codes 6 and 7 were very rare. They do not show up as clearly in the graph, but in Table 3 they total to 44 and 75 calls, respectively.
 
 One other point to note is that there is not a code 8; the codes skip from 7 to 9.
 
@@ -249,20 +253,6 @@ knitr::kable(cad %>%
              format.args = list(big.mark = ",")
              )
 
-```
-
-**Table of -1 Priority Code Events**
-```{r view code -1}
-# Identify the -1 events 
-neg_priority_code <- cad %>%
-  filter(Call_Priority_Code == "-1") %>%
-  select(event_datetime,
-         Call_Type_Desc,
-         Case_Type_Final_Desc,
-         Case_Type_Initial_Desc)
-
-
-rmarkdown::paged_table(neg_priority_code)
 ```
 
 
@@ -283,11 +273,9 @@ knitr::kable(cad %>%
 
 ```
 
-911 calls are about 43% of the events. Onview and some other telephone call are the second and third most common types, and together they comprise just over 50% of the event types. Text message, officer initiated, scheduled recurring event, and in-person complaints are very minimal sources of the events. 
+We have retained only calls for service that came in via 911 or other telephone calls (not via 911). 911 calls are about 68% of the calls and other telephone source makes up the remaining 32%.
 
-**Questions**
-1) Is the plan to focus solely on 911 call types? (If so, the below questions are not relevant.)
-2) What is the difference between Onview and Proactive(Officer Initiated)? Is it possible that these two types would be worth combining?
+For reference, prior to reducing the dataset, 911 calls were about 43% of the events and other telephone was 21%.
 
 
 ## Case Type Final Description
@@ -308,7 +296,7 @@ rmarkdown::paged_table(case_type_final_desc %>%
 
 ```
 
-Flip through the pages in the table to view the number of events with each type of case final description. Recall that this variable has 343 different descriptions. 
+Flip through the pages in the table to view the number of events with each type of case final description. Recall that this variable has **320 different descriptions.** 
 
 Some of these descriptions have a general description followed by a more specific description that follows a dash. We could parse on the general description and then aggregate to get a smaller set of categories. I demonstrate this in the table below. 
 
@@ -347,24 +335,24 @@ rmarkdown::paged_table(case_type_final_before_dash %>%
 
 ```
 
-This aggregation strategy reduced the number of categories to 153. Traffic related cases are the most common followed by disturbance and suspicious circumstances. If you flip through the pages, there are some categories that also appear to be similar to these top 3. For instance, traffic stop is listed on page 6, which seems like it could also fit under traffic. Also on page 6 is the category suspicious stop, which seems related to suspicious circumstances. All of descriptions and frequencies for the final case type descriptions are listed in the exported Excel file. 
+**This aggregation strategy reduced the number of categories by a little over half to 140.** Disturbance cases are the most common followed by suspicious circumstances and traffic. If you flip through the pages, there are some categories that also appear to be similar to these top 3. For instance, traffic stop is listed on page 6, which seems like it could also fit under traffic. Also on page 6 is the category "Dist", which is an abbreviation for disturbance. All of descriptions and frequencies for the final case type descriptions are listed in the exported Excel file (shared over email and on the github page). 
 
 *Other Comments*
 * Need to make sure to catch abbreviations using reg. expressions (e.g., burg --> burglary)
 * Similarly, use reg. expressions for categories that look alike but differ in terms of spacing (e.g., Arson, Bombs, Explo; Abandoned car & Abandoned vehicle)
-* "#NAME?" looks like it might be the classification for events that were not classified. There are 19,900 events with this classification, which is about 2.64 events.
+* "#NAME?" looks like it might be the classification for events that were not classified. There are 977 events with this classification, which is about 0.2 events.
 
 ```{r final case descriptions export}
-# Write Final Case Description Data Frames to Excel Workbook
-# case_descriptions_workbook <- createWorkbook()
-# 
-# addWorksheet(case_descriptions_workbook, sheetName="full_final_desc")
-# addWorksheet(case_descriptions_workbook, sheetName="first_final_desc")
-# addWorksheet(case_descriptions_workbook, sheetName="second_final_desc")
-# 
-# writeData(case_descriptions_workbook, "full_final_desc", case_type_final_desc)
-# writeData(case_descriptions_workbook, "first_final_desc", case_type_final_before_dash)
-# writeData(case_descriptions_workbook, "second_final_desc", case_type_final_after_dash)
+## Write Final Case Description Data Frames to Excel Workbook
+case_descriptions_workbook <- createWorkbook()
+
+addWorksheet(case_descriptions_workbook, sheetName="full_final_desc")
+addWorksheet(case_descriptions_workbook, sheetName="first_final_desc")
+addWorksheet(case_descriptions_workbook, sheetName="second_final_desc")
+
+writeData(case_descriptions_workbook, "full_final_desc", case_type_final_desc)
+writeData(case_descriptions_workbook, "first_final_desc", case_type_final_before_dash)
+writeData(case_descriptions_workbook, "second_final_desc", case_type_final_after_dash)
 
 ```
 
@@ -386,7 +374,7 @@ rmarkdown::paged_table(case_type_init_desc %>%
 )
 
 ```
-The top three/four initial case type descriptions occur at about the same frequency. The top four are also in the top four in the final description, but the ordering differs.
+The top two initial case type descriptions are similar to the final case description types. 
 
 One note on structure of these descriptions is that not as many of these descriptions have the same structure as noted in the final descriptions, that is a general description followed by a more specific description/detail, with the two descriptions separated by a dash "-". Below, I have parsed out the description as I did with the final case descriptions, however, it may be a less useful approach for this description. 
 
@@ -431,21 +419,23 @@ rmarkdown::paged_table(case_type_init_before_dash %>%
 
 ```
 
-Aggregating reduced the number of descriptions down to 125. The top four descriptions remain the same, but the rest of the top 10 have shifted ranks (e.g., assault, trespass). 
+Aggregating reduced the number of descriptions down to 123. The top four descriptions remain the same, but the rest of the top 10 have shifted ranks (e.g., assault, trespass). 
+
+**NOTE: Unknown is pretty substantial here (n=13,907, 2.89%). The #NAME? description is less frequent (n=528), but appears to also signify unknown case descriptions.**
 
 ```{r initial case descriptions export}
-# Write Initial Case Description Data Frames to Excel Workbook & Export
-# addWorksheet(case_descriptions_workbook, sheetName="full_init_desc")
-# addWorksheet(case_descriptions_workbook, sheetName="first_init_desc")
-# addWorksheet(case_descriptions_workbook, sheetName="second_init_desc")
-# 
-# writeData(case_descriptions_workbook, "full_init_desc", case_type_init_desc)
-# writeData(case_descriptions_workbook, "first_init_desc", case_type_init_before_dash)
-# writeData(case_descriptions_workbook, "second_init_desc", case_type_init_after_dash)
-# 
-# saveWorkbook(case_descriptions_workbook,
-#              file= "CAD19_case_descriptions.xlsx",
-#              overwrite = T)
+## Write Initial Case Description Data Frames to Excel Workbook & Export
+addWorksheet(case_descriptions_workbook, sheetName="full_init_desc")
+addWorksheet(case_descriptions_workbook, sheetName="first_init_desc")
+addWorksheet(case_descriptions_workbook, sheetName="second_init_desc")
+
+writeData(case_descriptions_workbook, "full_init_desc", case_type_init_desc)
+writeData(case_descriptions_workbook, "first_init_desc", case_type_init_before_dash)
+writeData(case_descriptions_workbook, "second_init_desc", case_type_init_after_dash)
+
+saveWorkbook(case_descriptions_workbook,
+             file= "CAD19_case_descriptions.xlsx",
+             overwrite = T)
 
 ```
 
@@ -465,9 +455,16 @@ group_by(Clear_By_Desc) %>%
 
 ```
 
-* It looks like a dash "-" represents missing clear by description (n=2,626). 
+In 38% of the service calls (n=286,250), assistance was rendered. The next most common response type was no arrest, but report, which was applied to about 31% of the calls (n=148,495). 
+
+The next most common clear by type was unable to locate incident or complainant. It was applied to about 11.5% of calls (n=55,366). 14 calls were marked as no such address or location (not sure if it is reasonable to consider this as similar to unable to locate incident).
+
+A physical arrest was made in 8.5% of calls (n=41,140). No police action was possible or necessary in 4% of calls (n=19,290).
+
+**OTHER NOTES:**
+* It looks like a dash "-" represents missing clear by description (n=1,878). 
 * There are some descriptions that I do not know what they mean or how they differ from other descriptions. For instance, how are responding units canceled by radio and duplicated or canceled by radio different?
-* Unable to locate incident or complainant is about 7.7% of the events. 
+* Unable to locate incident or complainant is about 11.5% of the events. 
 
 
 ## Precinct & Sector
@@ -479,8 +476,8 @@ group_by(Precinct) %>%
   mutate(percent = round((freq/sum(freq)) * 100, digits=2),
          freq = scales::comma(freq)) %>%
   arrange(-percent),
-  caption = "Table 5: Events by Precinct",
-  col.names = c("Precinct", "# Events", "%"), 
+  caption = "Table 5: Calls per Precinct",
+  col.names = c("Precinct", "# Calls", "%"), 
   format.args = list(big.mark = ",")
 )
 
@@ -496,8 +493,8 @@ precinct_freq_bar <- cad %>%
        aes(x = reorder(Precinct, -freq), y = freq, fill = Precinct)) + 
   geom_bar(stat="identity") +
   scale_fill_brewer(palette = "Set1") + 
-  labs(title = "Events per Precinct",
-  subtitle = "2019 Events", y = "Number of Events", x = "Precinct") +
+  labs(title = "Calls per Precinct",
+  subtitle = "Seattle, WA 2019", y = "Number of Calls", x = "Precinct") +
   scale_y_continuous(labels = scales::comma) + 
   theme_minimal() + theme(legend.position = "none")
 
@@ -512,9 +509,9 @@ precinct_freq_bar %>%
 ```
 
 
-The western precinct had the most events in 2019, with about 29% of the events occurring in the precinct. North was the next common, comprising about 25% of the events. Southwest had the fewest number of events recorded with 84,140 events last year. 
+The north and west precincts had the most calls with about 29% and 27% of all calls, respectively. South and and east precincts had similar shares of calls at about 16%. The southwest precinct had the fewest number of calls recorded - 51,572 (11%). 
 
-For 5,932 of the events, the precinct is unknown. We may be able to identify a precinct for these events if they have valid latitude and longitude coordinates. Let's look to see if they do have lat and long: 
+For 1,282 calls, the precinct is listed as unknown. We may be able to identify a precinct for these events if they have valid latitude and longitude coordinates. Let's look to see if they do have lat and long: 
 
 ```{r coordinates for unknown precincts}
 ## How many events with unknown precincts have valid coordinates?
@@ -536,7 +533,7 @@ knitr::kable(cad %>%
   
 ```
 
-The majority of the events with unknown precincts do not have coordinates that are within the extent of Seattle/King County, Washington. We can however use 1,962 of these events with unknown precincts as they do have coordinates that fall within the geographic extent of Seattle. When I create a spatial object from the coordinates, as shown a few sections below, I will be able to plot these. For some it may be obvious what the precinct is based on the precinct labels given to neighboring events. If the precinct classification is not obvious, the best thing to do would be to obtain a shapefile of the polygons for each of the five precincts, overlay it on the events and give the point the name of the polygon precinct that it falls within. [Seattle's Open Data website](https://data.seattle.gov/Public-Safety/Spd-Precincts/3rtr-jjhz) has such a shapefile that I will call on and use in the spatial geoprocessing section below. 
+About 43% of the calls with an unknown precinct have coordinates within the geographic extent of Seattle. We can use 562 of these events with unknown precincts and assign them a precinct. When I create a spatial object from the coordinates, as shown a few sections below, I will be able to plot these. For some it may be obvious what the precinct is based on the precinct labels given to neighboring events. If the precinct classification is not obvious, the best thing to do would be to obtain a shapefile of the polygons for each of the five precincts, overlay it on the events and give the point the name of the polygon precinct that it falls within or nearest to. [Seattle's Open Data website](https://data.seattle.gov/Public-Safety/Spd-Precincts/3rtr-jjhz) has such a shapefile that I will call on and use in the spatial geoprocessing section below. 
 
 There are some interesting bivariate analyses that could be explored. For example, call priority codes and precincts. View the interactive stacked bar chart below.
 
@@ -553,7 +550,7 @@ call_priority_precincts_stack <- cad %>%
   scale_fill_brewer(palette = "Set2") +
   labs(
     x = "Call Priority Code",
-    y = "Proportion of Events",
+    y = "Proportion of Calls",
     title = "Case Priority Code by Precinct",
     subtitle = "Seattle, WA",
     fill = "Precinct",
@@ -578,12 +575,13 @@ call_priority_precincts_stack %>%
 ```
 
 A few things stand out in the stacked bar graph of call priority codes and precincts. 
-* Just under half of the events with the specialized code -1 were in the Western precinct. 
-* The North and West precincts had very similar shares of events in codes 1 through 3. In each of these codes, the cases in the North and West total just over 50% of the cases with that code. * Just over 40% of the events classified as code 6 are in the Northern precinct. 
-* About 45% of code 9 events are in the Western precinct, which is similar to the share of code -1 events. 
+* The breakdown of precincts within codes 1 and 2 are very similar. The north and west precincts have very similar shares in these two codes. 
+* Most of the unknown precinct calls were classified as code 9. 
+* The south precinct had no code 7 cases. 
+* Over half of the calls in code 9, were in the western precinct. 
 
 
-Let's turn to focus on the sectors. There are 17 distinct sector names. 5,932 events that were not given a sector. These events are identical to those missing a precinct classification.  
+Let's turn to focus on the sectors. There are 17 distinct sector names. 1,282 calls were not given a sector. These calls are identical to those missing a precinct classification.  
 
 ```{r sector and precinct graph}
 ## Sector by Precinct Graph
@@ -595,8 +593,8 @@ sector_precinct_freq_bar <- cad %>%
        aes(x = reorder(Sector, -freq), y = freq, fill = Precinct)) + 
   geom_bar(stat="identity") +
   scale_fill_brewer(palette = "Set1") + 
-  labs(title = "Events per Sector-Precinct",
-  subtitle = "2019 Events", y = "Number of Events", x = "Sector") +
+  labs(title = "Calls per Sector-Precinct",
+  subtitle = "Seattle, WA 2019", y = "Number of Calls", x = "Sector") +
   scale_y_continuous(labels = scales::comma) + 
   theme_minimal() + 
   theme(legend.position = "bottom") + 
@@ -620,23 +618,21 @@ knitr::kable(cad %>%
   mutate(percent = round((freq/sum(freq)) * 100, digits=2),
          freq = scales::comma(freq)) %>%
   arrange(Precinct, -percent),
-  caption = "Table 7: Events by Precinct-Sector",
-  col.names = c("Precinct","Sector", "# Events", "Percent"), 
+  caption = "Table 7: Calls by Precinct-Sector",
+  col.names = c("Precinct","Sector", "# Calls", "Percent"), 
   format.args = list(big.mark = ",")
 )
 
 ```
-Sectors are unique to precincts. We can think of a sectors as a subdivision of the precinct. In the table above, we see that within the South precinct, Ocean sector had about 40% of the events, whereas the other two sectors - Robert and Sam - were about 30% each. 
+Sectors are unique to precincts. We can think of a sectors as a subdivision of the precinct. 
 
-The Edward sector had nearly half of the events in the East precinct. 
+King sector in the western precinct leads in the number of calls with 45,650 calls. This is about 34% of all calls in the west precinct. The other three sectors in the western precinct - David, Mary, and Queen - have about 10% to 12% fewer events than King. 
 
-The Southwest precinct's events were relatively evenly divided among the two sectors - Frank and William.
+Boy in the north precinct and Edward in the east precinct are the sectors with the next highest frequency of calls with over 33,000 calls. The share of calls in Boy is not substantially greater than other sectors in the north. However, Edward clearly has the majority of calls in the east precinct, amounting to about 44% of all calls in the precint. 
 
-The West precinct, which has the most events of all the precincts, has a wide spread in terms of the number of events in each of its four sectors. The King sector had the most events (76,274 about 35%), and Queen sector had the fewest (38,454 about 18%). 
+The two sectors of the southwest precinct - William and Frank - have a 50-50 split of the calls. 
 
-The North precinct has 5 sectors. Boy, Nora, and Union sectors have similar shares of events within their boundaries. The other two sectors - Lincoln and John - make-up just over 30% of the events in the precinct. 
-
-*The Seattle Open Data website does not appear to have a boundary shapefile or API for sector. This may be something to inquire about if we want to do point-in-polygon analyses.*
+*NOTE: The Seattle Open Data website does not appear to have a boundary shapefile or API for sector. This may be something to inquire about if we want to do point-in-polygon analyses at the sector level.*
 
 
 ## Squad Description
@@ -651,7 +647,7 @@ rmarkdown::paged_table(cad %>%
 )
 
 ```
-This is one of the variables with an unmanageable amount of categories. There are only 2,746 events missing a squad description. If you flip through the pages of the table you can see that the squad groups are named in various ways. Some are based on the field/area they work in (e.g., forensics, Arson/Bomb) and others are based on locations (i.e., precinct + sector). **If this is a variable that is considered important we would need to approach the aggregation like we would for the Case type descriptions using the first descriptor before the dash, regular expressions, and lazy matching to get broad categories and abbreviations, misspellings, and differences in ordering of words. **
+This is one of the variables with an unmanageable amount of categories. There are only 1,487 events missing a squad description. If you flip through the pages of the table you can see that the squad groups are named in various ways. Some are based on the field/area they work in (e.g., forensics, Arson/Bomb) and others are based on locations (i.e., precinct + sector). **NOTE: If this is a variable that is considered important we would need to approach the aggregation like we would for the Case type descriptions using the first descriptor before the dash, regular expressions, and lazy matching to get broad categories and abbreviations, misspellings, and differences in ordering of words. **
 
 
 ## Officer Identifier
@@ -660,7 +656,7 @@ This is one of the variables with an unmanageable amount of categories. There ar
 n_distinct(cad$Officer_Serial_Num)
 
 ```
-There are 1,342 officers in this dataset.
+There are 1,262 officers in this dataset.
 
 
 ## Response Time
@@ -702,7 +698,7 @@ summary(cad$Total_Service_Time_Seconds_SUM)
 
 ```
 
-The distribution for total service time on events is strange. There are 281 events missing a total service time. Additionally, there is at least one event that had a negative total service time recorded. First, let's see how many negative values we have. 
+The distribution for total service time on events is strange. There are 221 events missing a total service time. Additionally, there is at least one event that had a negative total service time recorded. First, let's see how many negative values we have. 
 
 
 ```{r total service time negs}
@@ -718,7 +714,7 @@ knitr::kable(cad %>%
 
 ```
 
-There are only 8 events in the dataset with negative values. When we include information like the event date, parsed response time, and case description type, we notice that two of these are duplicates. The other thing that stands out is that these events were all recorded on the same date, November 3rd. It is possible that the negative values were a recording error that occurred that day. We could also check for the average service time on other events of a similar type to see if the absolute value of total service time is reasonable. 
+There are only 7 events in the dataset with negative values. When we include information like the event date, parsed response time, and case description type, we notice that two of these are duplicates. The other thing that stands out is that these events were all recorded on the same date, November 3rd. It is possible that the negative values were a recording error that occurred that day. We could also check for the average service time on other events of a similar type to see if the absolute value of total service time is reasonable. 
 
 Now, let's look at the NA values. 
 ```{r total service time NAs}
@@ -730,7 +726,7 @@ rmarkdown::paged_table(cad %>%
 )
 
 ```
-The events with missing values vary on case types. There appears to be some duplicates, e.g., the assault-DV case on January 13th. Again, it seems like event date and response time would be useful for identifying duplicates and then de-duplicating this dataset. 
+The events with missing values vary on case types. There appears to be some duplicates, e.g., the assault-DV case on January 13th. Again, it seems like event date and response time would be useful for identifying duplicates this dataset. 
 
 For the sake of consistency, I parsed the total service time into time periods as I did with the response time. See some of the output below. 
 
@@ -751,11 +747,12 @@ rmarkdown::paged_table(cad %>%
 
 ```
 
-With the parsed by period version of service time, we see that the upper end of the service time distribution is 2 days. Notice that the six longest entries are missing case descriptions. There is also a duplicate among these six - the one on March 23rd. If you flip through the pages, you can spot more duplicates, which again suggests that de-duplicating on event date, time, and case type description would be most useful.
+With the parsed by period version of service time, we see that the upper end of the service time distribution is 2 days.
+
 
 ## Spatial Object
 
-Before transforming the dataframe into a spatial object, the events with missing or invalid coordinates need to be removed. After filtering those events out, the transformed spatial object contains 675,664 locations. In total there are 76,757 events that do not have valid coordinates. Mapping all of these events as points results in over-plotting as shown below.
+Before transforming the dataframe into a spatial object, the calls with missing or invalid coordinates need to be removed. After filtering those events out, the transformed spatial object contains 459,132 calls with locations. There were 21,679 calls for service that do not have valid coordinates. Mapping all of these calls as points results in over-plotting as shown below.
 
 
 ```{r spatial object, warning=F, message=F}
