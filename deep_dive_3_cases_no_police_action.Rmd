@@ -28,6 +28,7 @@ packages <- c(
               "ggplot2",
               "ggmap",
               "maptools",
+              "tmap",
               "raster",
               "spatstat",
               "plotly",
@@ -48,19 +49,12 @@ wd <- getwd()
 shp_path <- "/shp"
 precs_path <- "/Spd_Precincts/"
 
-
-## FUNCTIONS
-ks <- function (x) { number_format(accuracy = 1,
-                                   scale = 1/1000,
-                                   suffix = "k",
-                                   big.mark = ",")(x) }
-
 ```
 
 
 
 
-The goal of this set of analyses is to take a deeper dive into the 2019 Seattle calls for service data. To follow up on the [preliminary exploratory analysis](https://francine-stephens.github.io/francinestephens.github.io/cad19_eda.html), we will focus on three types of cases - Disturbance, Suspicious person, and trespass - as well as one type of case resolution - No possible action possible. The questions we want to address here include the following?
+The goal of this set of analyses is to take a deeper dive into the 2019 Seattle calls for service data. To follow up on the [preliminary exploratory analysis](https://francine-stephens.github.io/francinestephens.github.io/cad19_eda.html), we will focus on three types of cases - Disturbance, Suspicious person, and trespass - as well as one type of case resolution - No possible action possible. The questions we want to address here include the following:
 
 1) Where did the three types of cases occur? 
 2) How were these three types of cases resolved?
@@ -71,7 +65,7 @@ The goal of this set of analyses is to take a deeper dive into the 2019 Seattle 
 
 ## Focal Case Types
 
-
+**Where are these 3 types of cases occuring?**
 ```{r data import, warning=F, message=F}
 ## IMPORT AND REDUCE TO FOCAL CASE TYPES
 cad <- readRDS("cad_2019_data.rds")
@@ -101,12 +95,17 @@ cad <- cad %>%
 
 focal_cases <- cad %>%
   filter(str_detect(case_type_final_desc_first, 'DIST') |
+         Case_Type_Final_Desc == "DV - ARGUMENTS, DISTURBANCE (NO ARREST)" |
+         Case_Type_Final_Desc == "NOISE - DIST, GENERAL (CONST, RESID, BALL PLAY)" | 
+         Case_Type_Final_Desc == "NOISE - DISTURBANCE (PARTY, ETC)" |
          case_type_final_desc_second == "SUSPICIOUS PERSON" |
          str_detect(Case_Type_Final_Desc, "TRESPASS")) %>%
     mutate(case_type = recode_factor(case_type_final_desc_first,
                                      "DIST" = "Disturbance",
                                      "DISTURBANCE, MISCELLANEOUS/OTHER" = "Disturbance",
                                      "DISTURBANCE" = "Disturbance",
+                                     "DV" = "Disturbance",
+                                     "NOISE" = "Disturbance",
                                      "SUSPICIOUS CIRCUM." = "Suspicious Person",
                                      "TRESPASS" = "Trespass",
                                      "PROWLER" = "Trespass")
@@ -136,7 +135,7 @@ trespass_sf <- cad %>%
 
 ## CASE TYPES TABLE
 knitr::kable(focal_cases %>% 
-               count(case_type), 
+             count(case_type), 
              caption = "Table 1: Frequency of Focal Case Types",
   col.names = c("Case Type", "# of Calls"), 
   format.args = list(big.mark = ",")
@@ -159,14 +158,14 @@ knitr::kable(focal_cases %>%
          #  filter(Precinct != "UNKNOWN",
          #         Dispatch_Blurred_Latitude == -1) %>%
          #  select(Precinct, Dispatch_Blurred_Latitude, Dispatch_Blurred_Longitude)
-    # 5,402 cases with a precinct DO NOT have a valid lat/lng. 
+    # 5,780 cases with a precinct DO NOT have a valid lat/lng. 
 
 ## CREATE SPATIAL OBJECT OF ONLY CASES WITH VALID LAT/LNGS (FOR POINT MAPS)
 focal_cases_pts_sf <- focal_cases %>%
   filter(Dispatch_Blurred_Longitude != -1 | Dispatch_Blurred_Latitude != -1) %>% 
   st_as_sf(coords=c("Dispatch_Blurred_Longitude", "Dispatch_Blurred_Latitude"),
            crs=4326)
-    # 5,425 dropped b/c lack valid lat and long
+    # 5,780 dropped b/c lack valid lat and long
   
 
 ## LOAD PRECINCTS & GEOPROCESS
@@ -214,7 +213,7 @@ focal_cases_precincts_full <- focal_cases %>%
 
 ```{r interactive point map of different cases}
 ## INTERACTIVE MAP POINTS COLOR LAYERS BY TYPE OF CASE
-cases_pal <- colorFactor(c("navy", "red", "orange"),
+cases_pal <- colorFactor(c("red", "blue", "green"),
                          domain = c("Disturbance", "Suspicious Person", "Trespass"))
 
 leaflet() %>% 
@@ -248,11 +247,30 @@ leaflet() %>%
     options = layersControlOptions(collapsed = F)
   )
   
-  
 ```
+
+Even when we limit our focus to disturbance, trespass, and suspicious person cases, the north and west precincts lead in the number calls. Table 2 indicates that the north and west precincts together had just under 60% of all calls for the three types of cases. Further, the north had just about double the number of calls for these types of cases than the south precinct. 
 
 
 ```{r table of cases by precinct results, warning=F, message=F}
+# Table of all 3 cases by precinct
+knitr::kable(calls_per_precinct_3cases,
+  caption = "Table 2: Calls By Precinct for all 3 Case Types",
+  col.names = c("Precinct", "# Calls", "%"))
+
+```
+
+
+The bar graph below (Figure 1) breaks down the types of cases within each precinct. Below figure 1, Table 3 presents the frequencies for each case type and precinct. 
+
+*Disturbances are the majority of cases in all precincts.* Although over 50% of the focal cases are disturbance in all five precincts, the northern precinct had about 4 to 5 percentage point fewer disturbance cases than the other four precincts. This seems to be driven by the fact that the northern precinct had a sizable amount of suspicious person cases - 35.5%. 
+
+*The north and southwest precincts lead in the share of suspicious persons.* Just over one-third of the calls in these two precincts are about suspicious persons. In fact, in the southwest precinct, there were only 4,000 fewer calls about suspicious persons than disturbances. 
+
+*The western precinct has the highest number and share of trespass calls.* 22% of all calls in the western precinct were reports of trespassing. Notice that in the western precinct the trespass and suspicious person calls have very similar percentages. No other precincts had two case types that were equally distributed. Lastly, the number of calls about trespassing in the western precinct - 10,216 - doubled the number of calls in each of the other precincts.
+
+
+```{r graph of precinct x type}
 ## Calls per precinct - All 3 types
 calls_per_precinct_3cases <- focal_cases_precincts_full %>%
   group_by(Precinct) %>%
@@ -261,14 +279,6 @@ calls_per_precinct_3cases <- focal_cases_precincts_full %>%
   mutate(percent = round((Calls/sum(Calls)) * 100, digits=2),
          Calls = scales::comma(Calls))
 
-knitr::kable(calls_per_precinct_3cases,
-  caption = "Table: Calls By Precinct for all 3 Case Types",
-  col.names = c("Precinct", "# Calls", "%"))
-
-```
-
-
-```{r graph of precinct x type}
 ## Calls per precinct x Type Graph
 calls_per_precinct_by_case <- focal_cases_precincts_full %>%
   group_by(Precinct, case_type) %>%
@@ -282,7 +292,7 @@ focal_cases_precinct_stacked <- ggplot(calls_per_precinct_by_case, aes(fill=case
   labs(
     x = "Precinct",
     y = "Proportion of Calls",
-    title = "Distribution of Cases within Precincts",
+    title = "Fig. 1: Distribution of Cases within Precincts",
     subtitle = "Seattle, WA",
     fill = "Case Type",
     caption = "Seattle, WA 2019"
@@ -311,12 +321,13 @@ focal_cases_precinct_stacked %>%
 knitr::kable(calls_per_precinct_by_case %>%
                arrange(case_type, -percent) %>%
                relocate(Precinct, .after = "case_type"),
-  caption = "Table: Calls By Precinct & Case Type",
+  caption = "Table 3: Calls By Precinct & Case Type",
   format.args = list(big.mark = ","),
   col.names = c("Case", "Precinct", "# Calls", "% in Precinct")
   )
 
 ```
+
 
 ```{r table of precinct-sector x case type graph, message=F, warning=F}
 ## Precinct-Sector x Cases Graph
@@ -345,7 +356,9 @@ calls_per_precinct_sector_by_case <- focal_cases_precincts_full %>%
                                             "MARY")))
 
 
-focal_cases_precinct_sector_lolliplot <-  ggplot(calls_per_precinct_sector_by_case, aes(y=Sector, x = percent, label = percent)) + 
+focal_cases_precinct_sector_lolliplot <- ggplot(
+  calls_per_precinct_sector_by_case, aes(y=Sector, x = percent, label = percent)
+  ) + 
   geom_segment(aes(yend = Sector), xend = 0, colour = "grey50") +
   geom_point(aes(color = Precinct), size = 3) +  # Use a larger dot
   #geom_text(nudge_x = 3.7, size = 4) +
@@ -353,7 +366,7 @@ focal_cases_precinct_sector_lolliplot <-  ggplot(calls_per_precinct_sector_by_ca
   labs(
     x = "Calls within Sector",
     y = "",
-    title = "Distribution of Cases within Sectors",
+    title = "Fig. 2: Distribution of Cases within Sectors",
     subtitle = "Seattle, WA",
     fill = "Case Type",
     caption = "Seattle, WA 2019"
@@ -410,7 +423,6 @@ knitr::kable(focal_cases_precincts_full %>%
 
 ```{r resolution by type}
 ## Resolution by Focal Case Type Lolliplot
-
 focal_cases_lolliplot <- focal_cases %>%
   mutate(Clear_By_Desc = plyr::revalue(Clear_By_Desc, c("-"="NOT LISTED"))) %>%
   count(Clear_By_Desc, case_type) %>%
@@ -447,46 +459,233 @@ The majority of calls come from 911. However, the distribution of calls looks a 
 
 ```{r focal cases by Call Type}
 ## Focal Cases X Call Type Graph
-focal_cases_call_type_stacked <- focal_cases %>%
+knitr:::kable(focal_cases %>%
   count(case_type, Call_Type_Desc) %>%
   group_by(case_type) %>%
-  mutate(percent = round((n/sum(n)) * 100, digits=2)) %>%
-ggplot(., aes(fill=Call_Type_Desc, y=n, x=case_type)) + 
-  geom_bar(position="fill", stat="identity") +
-  scale_fill_brewer(palette = "Set2") +
-  labs(
-    x = "Type of Case",
-    y = "Proportion of Calls",
-    title = "Distribution of Call Types by Case",
-    subtitle = "Seattle, WA",
-    fill = "Call Type",
-    caption = "Seattle, WA 2019"
-  ) +
-  coord_flip() + 
-  theme_classic() +
-  theme(
-    legend.position = "bottom",
-    legend.direction = "vertical",
-    axis.text.x = element_text(hjust=1)
-    )
-  
-focal_cases_call_type_stacked %>%
-  ggplotly() %>%
-  layout(
-    xaxis = list(fixedrange = T),
-    yaxis = list(fixedrange = T)
-  ) %>%
-  config(displayModeBar = F)
+  mutate(percent = round((n/sum(n)) * 100, digits=2)),
+  caption = "Table: Focal Cases by Call Type",
+  format.args = list(big.mark = ","),
+  col.names = c("Case Type", "Call Type", "# Calls", "%")
+)
+
 
 ```
 
-
-
 ## Cases where no police action was possible or necessary
 
+No police action was deemed possible or necessary for 19,290 calls. There are 63 types of cases that had been deemed impossible or unnecessary for police action to be taken.  In the graph below, the number of calls for each of the top 20 case types with the no police action resolution are shown. You can see disturbance and suspicious person are the top 2 most common. Disturbance calls make up about 27% of these cases and suspicious person cases are 15%. Trespass cases are in the top 20, but rank lower than our other two focal cases at 9th most frequent. 
+
+*Other Thoughts:*
+
+* Suspicious circumstances - The frequencies seem to closely track with suspicious person cases. Perhaps run comparisons between suspicious persons and circumstances spatially. 
+* Prowler - Trespass and prowler also tend to mirror each other in tabulations. Tracking these two spatially may be useful too.
+
+
 ```{r reduce to police action not possible}
+## Reduce to no police action resolutions
 no_police_action <- cad %>%
   filter(Clear_By_Desc == "NO POLICE ACTION POSSIBLE OR NECESSARY")
 
 ```
 
+```{r case type counts for no police action}
+## EXPORT no police action case types
+no_police_action_case_types <- no_police_action %>% 
+  group_by(Case_Type_Final_Desc) %>%
+  summarize(freq = n()
+            ) %>%
+  mutate(percent = round((freq/sum(freq)) * 100, digits=2)) %>%
+  arrange(-freq)
+
+write_csv(no_police_action_case_types,
+          "no_police_action_case_types.csv",
+          na = "")
+
+rm(no_police_action_case_types)
+
+```
+
+```{r case type counts for no police action agg case type}
+## AGGREGATE case types for graphing
+no_police_action_case_freq <- no_police_action %>% 
+  mutate(
+         Case_Type_Final_Desc = str_replace(
+           Case_Type_Final_Desc, c("PROWLER - TRESPASS", 
+                                   "PROWLER - TRESPASS, PARKS EXCLUSION"), "TRESPASS"),
+         Case_Type_Final_Desc = str_replace(
+           Case_Type_Final_Desc, "DV - ARGUMENTS, DISTURBANCE (NO ARREST)", 
+           "DISTURBANCE - DV"),
+         Case_Type_Final_Desc = str_replace(Case_Type_Final_Desc, 
+                                            "NOISE - DIST, GENERAL (CONST, RESID, BALL PLAY)",
+                                            "DISTURBANCE - NOISE, GENERAL"),
+         Case_Type_Final_Desc = str_replace(Case_Type_Final_Desc, 
+                                            "NOISE - DISTURBANCE (PARTY, ETC)", 
+                                            "DISTURBANCE - NOISE, GENERAL"),
+         Case_Type_Final_Desc = str_replace(Case_Type_Final_Desc, 
+                                            "SUSPICIOUS CIRCUM. - SUSPICIOUS PERSON",
+                                            "SUSPICIOUS PERSON"),
+         Case_Type_Final_Desc = str_replace(Case_Type_Final_Desc, 
+                                            "ASSAULTS, OTHER",
+                                            "ASSAULTS"),
+         Case_Type_Final_Desc = str_replace(Case_Type_Final_Desc, 
+                                            "PERSON - RUNAWAY",
+                                            "RUNAWAY PERSON"),
+         case_type_final_desc_first = str_trim(str_extract(Case_Type_Final_Desc, "[^-]+")), 
+         case_type_final_desc_first = recode_factor(case_type_final_desc_first,
+                                     "TRESPASS, PARKS EXCLUSION" = "TRESPASS",
+                                     "CASUALTY,NON" = "CASUALTY NON CRIMINAL",
+                                     "#NAME?" = "UNKNOWN",
+                                     "UNKNOWN?" = "UNKNOWN",
+                                     "HAZ" = "HAZARDS",
+                                     "SEX OFFENSES (NON" = "SEX OFFENSES (NON RAPE)",
+                                     "MISSING" = "MISSING PERSON",
+                                     "PERSON" = "MISSING PERSON",
+                                     "HARAS" = "HARASSMENT",
+                                     "DOWN" = "DOWN PERSON",
+                                     "BURN" = "RECKLESS BURNING",
+                                     "SERVICE" = "WELFARE CHECK",
+                                     "WEAPN" = "WEAPON",
+                                     "WEAPON,PERSON WITH" = "WEAPON",
+                                     "WEAPON, PERSON WITH" = "WEAPON",
+                                     "CASUALTY NON" = "CASUALTY DRUG RELATED",
+                                     "DISTURBANCE, MISCELLANEOUS/OTHER" = "DISTURBANCE",
+                                     "NUISANCE" = "NUISANCE OR MISCHIEF",
+                                     "CHILD" = "ABANDONED, ABUSED AND NEGLECTED CHILD"
+                                     )) %>%
+  group_by(case_type_final_desc_first) %>%
+  summarize(n = n()
+            ) %>%
+  mutate(percent = round((n/sum(n)) * 100, digits=2)) %>%
+  arrange(-n) 
+
+## Graph of top 20
+no_police_action_case_freq %>%
+  slice(1:20) %>%
+ ggplot(., aes(x = n, y = reorder(case_type_final_desc_first, n), label = comma(n, accuracy=1))) +
+  geom_segment(aes(yend = case_type_final_desc_first), xend = 0, colour = "grey80") +
+  geom_point(size = 7.5, color = "blue", alpha=0.6) + 
+  geom_text(size = 2, color = "white", fontface = "bold") +  
+  labs(title = "Top 20 cases where police action was not possible or necessary",
+       x = "# of Calls",
+       y = "",
+       caption = "Seattle, WA 2019") + 
+  scale_x_continuous(labels = scales::comma, breaks=pretty_breaks(n=10)) +
+  theme_bw() +
+  theme(
+  panel.grid.major.y = element_blank(),
+  axis.text.x = element_text(angle = 45, hjust=1),
+  #panel.grid.major.y = element_line(colour = "grey60", linetype = "dashed")
+)
+
+```
+
+
+
+
+```{r Create & Map points for cases where no police action is possible}
+## CREATE SPATIAL OBJECT OF ONLY CASES WITH VALID LAT/LNGS (FOR POINT MAP)
+no_police_action_pts_sf <- no_police_action %>%
+  filter(Dispatch_Blurred_Longitude != -1 | Dispatch_Blurred_Latitude != -1) %>% 
+  st_as_sf(coords=c("Dispatch_Blurred_Longitude", "Dispatch_Blurred_Latitude"),
+           crs=4326)
+
+no_police_action_pal <- colorFactor(
+  palette = "Spectral",
+  domain = no_police_action_pts_sf$Clear_By_Desc)
+
+
+leaflet(no_police_action_pts_sf) %>% 
+  addTiles() %>% 
+  addCircleMarkers(
+    radius = 1.25,
+    fillColor = ~no_police_action_pal(Clear_By_Desc),
+    color = "black",
+    opacity = 0.5,
+    fillOpacity = 1,
+    weight = 1
+) %>%
+  addLegend(
+    data = no_police_action_pts_sf,
+    pal = no_police_action_pal,
+    values = ~Clear_By_Desc,
+    title = "2019 Service Callsresolved<br>without police action"
+  )
+
+```
+
+The precinct-level map shows that the cases resolved without police action are largely in the north and west precincts. 
+
+```{r precinct map of no police action}
+## CREATE PRECINCT VIABLE DATAFRAME FOR NO POLICE ACTION
+no_police_action_add_precinct_sf <- no_police_action %>%
+  filter(Precinct == "UNKNOWN" & (
+      Dispatch_Blurred_Latitude != -1 | Dispatch_Blurred_Longitude != -1
+      )
+    ) %>%
+    st_as_sf(coords=c("Dispatch_Blurred_Longitude", "Dispatch_Blurred_Latitude"),
+           crs=4326)  %>%
+  st_join(.,
+          precincts_sf,
+          join = st_nearest_feature) %>% 
+  select(-Precinct, "Precinct" = precinct, -name) %>%
+  relocate(Precinct, .before = Sector)
+
+no_police_action_precincts_full <- no_police_action %>%
+  filter(Precinct!= "UNKNOWN") %>%
+  st_as_sf(coords=c("Dispatch_Blurred_Longitude", "Dispatch_Blurred_Latitude"),
+           crs=4326)  %>% 
+  rbind(., no_police_action_add_precinct_sf) %>%
+  st_set_geometry(NULL)
+  
+## MAP NO POLICE ACTION BY PRECINCTS
+no_police_action_precincts_sf <- no_police_action_precincts_full %>%
+  group_by(Precinct) %>%
+  summarize(Calls = n()) 
+
+no_police_precincts_sf <- precincts_sf %>% 
+  left_join(., no_police_action_precincts_sf, by = c("precinct" = "Precinct"))
+
+precinct_pal_no_police_action <- colorNumeric(
+  palette = "Purples",
+  domain = no_police_precincts_sf$Calls
+)
+
+leaflet() %>%
+addTiles() %>% 
+addPolygons(
+    data = no_police_precincts_sf,
+    fillColor = ~precinct_pal_no_police_action(Calls),
+    color = "Black",
+    opacity = 0.5,
+    fillOpacity = 0.5,
+    weight = 1.5,
+    label = ~paste0(precinct, " - Total: ",
+      format(Calls, big.mark = ","))
+    ) %>% 
+addLegend(
+  data = no_police_precincts_sf,
+  pal = precinct_pal_no_police_action,
+  values = ~Calls,
+  title = "Service Calls resolved without<br>police action per Precinct"
+  )
+
+```
+
+
+```{r no police action by sector}
+seattle <- precincts_sf %>%
+  mutate(city = "Seattle") %>%
+  group_by(city)
+
+carto <- "https://cartodb-basemaps-{s}.global.ssl.fastly.net/light_all/{z}/{x}/{y}{r}.png"
+
+no_police_sector_map <- tm_basemap(carto) + 
+  tm_shape(no_police_action_pts_sf %>% filter(Sector != "Missing")) +
+    tm_dots("Sector", palette = "Accent") +
+    tm_facets(by = "Precinct") + 
+    tm_shape(precincts_sf) +
+    tm_borders(col = "black") 
+  
+tmap_leaflet(no_police_sector_map)
+
+```
