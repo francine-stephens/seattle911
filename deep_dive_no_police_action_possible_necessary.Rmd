@@ -1,0 +1,393 @@
+---
+title: "Deep Dive on Clear By Description - No Police Action Possible or Necessary"
+author: "Francine Stephens"
+date: "Last Updated: `r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    theme: united
+    highlight: tango
+---
+
+```{r setup, include=F, warning=F, message=F}
+knitr::opts_chunk$set(echo=F)
+
+## Libraries
+options(tidyverse.quiet = T)
+packages <- c(
+              "tidyverse",
+              "scales",
+              "naniar",
+              "lubridate",
+              "googleway",
+              "sf",
+              "sp",
+              "ggplot2",
+              "ggmap",
+              "ggpubr",
+              "maptools",
+              "tmap",
+              "raster",
+              "spatstat",
+              "plotly",
+              "KernSmooth",
+              "spdep",
+              "spDataLarge",
+              "tigris",
+              "leaflet",
+              "RColorBrewer", 
+              "censusapi", 
+              "tidycensus", 
+              "openxlsx",
+              "units", 
+              "mapboxapi"
+              )
+lapply(packages, library, character.only = T)
+options(dplyr.summarise.inform = F)
+
+## Local Paths 
+setwd("~/Projects/seattle911")
+wd <- getwd()
+shp_path <- "/shp"
+precs_path <- "/Spd_Precincts/"
+sectors_path <- "/SPD_Beats_WGS84/"
+
+## API
+mb_access_token(
+  "sk.eyJ1IjoiZnJhbmNpbmVzdGVwaGVucyIsImEiOiJja2ljb3VrczMwdDdhMnhsNjA4Yjh1c2h1In0.WJjq6TysT6zZZnaxsN0s5g", 
+  overwrite = T)
+readRenviron("~/.Renviron")
+
+## PARAMETERS
+wgs <- 4326
+proj <- 2285  # NAD 83 USft
+```
+
+
+The set of descriptive and spatial analyses in this web-report is a follow up on the [preliminary exploratory analysis](https://francine-stephens.github.io/francinestephens.github.io/cad19_eda.html). We take a deeper dive into the cases that were resolved without police action and in particular were labeled as no police action possible or necessary. This report tackles two questions:
+
+1) What types of cases were resolved without police action because it was not possible or necessary? 
+2) Where are the cases that were resolved in this manner located?
+
+## What types of cases had the clear by description "no police action possible or necessary"?
+
+```{r cad data import, echo=F, warning=F, message=F, include=F}
+## IMPORT CAD DATA AND REDUCE TO FOCAL CASE TYPES
+cad <- readRDS("cad_2019_data.rds")
+
+cad <- cad %>%
+  mutate(event_datetime = mdy_hm(Event_First_Dispatch_Time_ATTR),
+         event_date = as.Date(event_datetime),
+         event_month = month(event_datetime, label=T), 
+         Call_Priority_Code = factor(Call_Priority_Code,
+                                     levels = c("-1",
+                                                "1",
+                                                "2",
+                                                "3",
+                                                "4",
+                                                "5",
+                                                "6",
+                                                "7",
+                                                "8",
+                                                "9")),
+         case_type_final_desc_first = str_trim(str_extract(Case_Type_Final_Desc, "[^-]+"),
+                                          side = c("both")), 
+         case_type_final_desc_second = str_trim(str_extract(Case_Type_Final_Desc, "[^-]*$"),
+                                           side = c("both")),
+         response_time_parsed = seconds_to_period(CAD_Event_Response_Time_Seconds_SUM),
+         total_service_time_parsed = seconds_to_period(Total_Service_Time_Seconds_SUM)
+  )
+
+## IMPORT SHAPEFILES
+beats_sf <- st_read(paste0(wd,
+                             shp_path, 
+                             sectors_path, 
+                             "SPD_Beats_WGS84.shp"),
+                             quiet = F
+                        )
+
+# king_zips_sf <- 
+#   st_read(
+#     "https://opendata.arcgis.com/datasets/83fc2e72903343aabff6de8cb445b81c_2.geojson"
+#     )
+
+# king_zips_proj <- king_zips_sf %>%
+#   st_transform(., crs = proj) %>%
+#   mutate(area_sqmi = st_area(.),
+#          area_sqmi = as.numeric(set_units(area_sqmi, mi^2))
+#   ) 
+
+## CREATE GEOGRAPHIES
+beats_proj <- beats_sf %>%
+  st_transform(., crs = proj) %>%
+  mutate(area_sqmi = st_area(.),
+         area_sqmi = as.numeric(set_units(area_sqmi, mi^2))
+  )
+
+sectors_sf <- beats_sf %>%
+  group_by(sector) %>%
+  summarize(beats = n())
+
+sectors_proj <- sectors_sf %>%
+  st_transform(., crs = proj) %>%
+  mutate(area_sqmi = st_area(.),
+         area_sqmi = as.numeric(set_units(area_sqmi, mi^2))
+  )
+  
+precincts_sf <- beats_sf %>% 
+  group_by(first_prec) %>%
+  summarize(sectors = n()) %>% 
+  mutate(precinct = recode_factor(first_prec,
+                         "E" = "EAST",
+                         "N" = "NORTH",
+                         "S" = "SOUTH",
+                         "SW" = "SOUTHWEST",
+                         "W" = "WEST",
+                         "NA" = "NA"
+                         )
+         )
+
+precincts_proj <- precincts_sf %>% 
+  st_transform(., crs = proj) %>%
+  mutate(area_sqmi = st_area(.),
+         area_sqmi = as.numeric(set_units(area_sqmi, mi^2)),
+         precinct = recode_factor(first_prec,
+                         "E" = "EAST",
+                         "N" = "NORTH",
+                         "S" = "SOUTH",
+                         "SW" = "SOUTHWEST",
+                         "W" = "WEST",
+                         "NA" = "NA"
+                         )
+         )
+
+seattle_sf <- beats_sf %>%
+  mutate(city = "Seattle") %>%
+  group_by(city) %>%
+  summarize(beats = n())
+
+seattle_proj <- seattle_sf %>%
+  st_transform(., crs = proj) %>%
+  mutate(area_sqmi = st_area(.),
+         area_sqmi = as.numeric(set_units(area_sqmi, mi^2))
+  ) 
+
+```
+
+```{r pressure}
+## Reduce to no police action resolutions
+no_police_action <- cad %>%
+  filter(Clear_By_Desc == "NO POLICE ACTION POSSIBLE OR NECESSARY")
+
+## EXPORT no police action case types
+no_police_action_case_types <- no_police_action %>% 
+  group_by(Case_Type_Final_Desc) %>%
+  summarize(freq = n()
+            ) %>%
+  mutate(percent = round((freq/sum(freq)) * 100, digits=2)) %>%
+  arrange(-freq)
+
+# write_csv(no_police_action_case_types,
+#           "no_police_action_case_types.csv",
+#           na = "")
+
+rm(no_police_action_case_types)
+
+```
+
+No police action was deemed possible or necessary for *19,290 calls.* There are *63 different types of cases* that had been deemed impossible or unnecessary for police action to be taken. The full list of case types and their frequencies can be downloaded as an [Excel file](https://docs.google.com/spreadsheets/d/1hYHU6ADwO-XHV8gMm6WExEk0kjkYDeeuYlKvu3AX6EI/edit?usp=sharing). To keep the number of categories more manageable, I graphed the top 20 case types with this case resolution below in the Figure 1.
+
+**44% of all the calls about cases which were deemed as unable or unnecessary to resolve by police action were disturbance, suspicious person, and trespass calls.** 
+
+* Disturbance and suspicious person are the top 2 most common. Disturbance calls make up about 27% of these cases and suspicious person cases are 15%. 
+* Trespass cases are in the top 20, but rank lower than our other two focal cases at 9th most frequent. 
+* Traffic related cases and assisting the public were also among the top 5 most common cases.
+
+```{r case type counts for no police action agg case type}
+## AGGREGATE case types for graphing
+no_police_action_case_freq <- no_police_action %>% 
+  mutate(
+         Case_Type_Final_Desc = str_replace(
+           Case_Type_Final_Desc, c("PROWLER - TRESPASS", 
+                                   "PROWLER - TRESPASS, PARKS EXCLUSION"), "TRESPASS"),
+         Case_Type_Final_Desc = str_replace(
+           Case_Type_Final_Desc, "DV - ARGUMENTS, DISTURBANCE (NO ARREST)", 
+           "DISTURBANCE - DV"),
+         Case_Type_Final_Desc = str_replace(Case_Type_Final_Desc, 
+                                            "NOISE - DIST, GENERAL (CONST, RESID, BALL PLAY)",
+                                            "DISTURBANCE - NOISE, GENERAL"),
+         Case_Type_Final_Desc = str_replace(Case_Type_Final_Desc, 
+                                            "NOISE - DISTURBANCE (PARTY, ETC)", 
+                                            "DISTURBANCE - NOISE, GENERAL"),
+         Case_Type_Final_Desc = str_replace(Case_Type_Final_Desc, 
+                                            "SUSPICIOUS CIRCUM. - SUSPICIOUS PERSON",
+                                            "SUSPICIOUS PERSON"),
+         Case_Type_Final_Desc = str_replace(Case_Type_Final_Desc, 
+                                            "ASSAULTS, OTHER",
+                                            "ASSAULTS"),
+         Case_Type_Final_Desc = str_replace(Case_Type_Final_Desc, 
+                                            "PERSON - RUNAWAY",
+                                            "RUNAWAY PERSON"),
+         case_type_final_desc_first = str_trim(str_extract(Case_Type_Final_Desc, "[^-]+")), 
+         case_type_final_desc_first = recode_factor(case_type_final_desc_first,
+                                     "TRESPASS, PARKS EXCLUSION" = "TRESPASS",
+                                     "CASUALTY,NON" = "CASUALTY NON CRIMINAL",
+                                     "#NAME?" = "UNKNOWN",
+                                     "UNKNOWN?" = "UNKNOWN",
+                                     "HAZ" = "HAZARDS",
+                                     "SEX OFFENSES (NON" = "SEX OFFENSES (NON RAPE)",
+                                     "MISSING" = "MISSING PERSON",
+                                     "PERSON" = "MISSING PERSON",
+                                     "HARAS" = "HARASSMENT",
+                                     "DOWN" = "DOWN PERSON",
+                                     "BURN" = "RECKLESS BURNING",
+                                     "SERVICE" = "WELFARE CHECK",
+                                     "WEAPN" = "WEAPON",
+                                     "WEAPON,PERSON WITH" = "WEAPON",
+                                     "WEAPON, PERSON WITH" = "WEAPON",
+                                     "CASUALTY NON" = "CASUALTY DRUG RELATED",
+                                     "DISTURBANCE, MISCELLANEOUS/OTHER" = "DISTURBANCE",
+                                     "NUISANCE" = "NUISANCE OR MISCHIEF",
+                                     "CHILD" = "ABANDONED, ABUSED AND NEGLECTED CHILD"
+                                     )) %>%
+  group_by(case_type_final_desc_first) %>%
+  summarize(n = n()
+            ) %>%
+  mutate(percent = round((n/sum(n)) * 100, digits=2)) %>%
+  arrange(-n) 
+
+## Graph of top 20
+no_police_action_case_freq %>%
+  slice(1:20) %>%
+ ggplot(., aes(x = n, y = reorder(case_type_final_desc_first, n), label = comma(n, accuracy=1))) +
+  geom_segment(aes(yend = case_type_final_desc_first), xend = 0, colour = "grey80") +
+  geom_point(size = 7.5, color = "purple", alpha=0.8) + 
+  geom_text(size = 2, color = "white", fontface = "bold") +  
+  labs(title = "Fig. 1:Top 20 cases where police action was not possible or necessary",
+       x = "# of Calls",
+       y = "",
+       caption = "Seattle, WA 2019") + 
+  scale_x_continuous(labels = scales::comma, breaks=pretty_breaks(n=10)) +
+  theme_bw() +
+  theme(
+  panel.grid.major.y = element_blank(),
+  axis.text.x = element_text(angle = 45, hjust=1)
+)
+
+
+# Extract top 20 case type names
+top_20_case_types_no_pols_action <- no_police_action_case_freq %>%
+  slice(1:20) %>% 
+  select(case_type_final_desc_first)
+
+```
+
+
+In addition to knowing the raw frequencies of cases that were resolved without police action due to police action being impossible or unnecessary, it is helpful to know what proportion of these case types were resolved in this manner. Figure 2 shows the breakdown of this type of resolution for the top 20 case types. 
+
+**The rankings shift when we consider the share of these top 20 cases in which police action was deemed not possible or necessary to resolve the case. Among these case types, no case type had more than 11% of the cases in 2019 that were classified as police action not being possible or necessary.**
+
+* Of all suspicious circumstances cases in 2019, just over 10% were resolved in this manner. 
+* The shares for Mischief/Nuisance and Animal Complaint were just under 10%. 
+* Police action was deemed impossible or unnecessary for approximately 6% of disturbance and suspicious persons cases.
+* Just over 3% of trespass cases were classified as police action not being possible or necessary.
+
+
+```{r create lolliplot of percent resolved without police action, message=F, warning=F}
+## CREATE lolliplot of % resolved w/o police action
+# Extract top 20 case type names
+top_20_case_types_no_pols_action <- no_police_action_case_freq %>%
+  slice(1:20) %>% 
+  select(case_type_final_desc_first)
+
+perc_no_police_action <- cad %>%
+  mutate(no_police_action = as.factor(if_else(
+    Clear_By_Desc == "NO POLICE ACTION POSSIBLE OR NECESSARY",
+                                    1,
+                                    0)),
+    no_police_action = recode_factor(no_police_action,
+                                          "0" = "OTHER RESOLUTION",
+                                          "1" = "NO POLICE ACTION POSSIBLE OR NECESSARY"), 
+    Case_Type_Final_Desc = str_replace(
+    Case_Type_Final_Desc, c("PROWLER - TRESPASS", 
+                                   "PROWLER - TRESPASS, PARKS EXCLUSION"), "TRESPASS"),
+    Case_Type_Final_Desc = str_replace(
+    Case_Type_Final_Desc, "DV - ARGUMENTS, DISTURBANCE (NO ARREST)", 
+           "DISTURBANCE - DV"),
+    Case_Type_Final_Desc = str_replace(Case_Type_Final_Desc, 
+                                            "NOISE - DIST, GENERAL (CONST, RESID, BALL PLAY)",
+                                            "DISTURBANCE - NOISE, GENERAL"),
+    Case_Type_Final_Desc = str_replace(Case_Type_Final_Desc, 
+                                            "NOISE - DISTURBANCE (PARTY, ETC)", 
+                                            "DISTURBANCE - NOISE, GENERAL"),
+    Case_Type_Final_Desc = str_replace(Case_Type_Final_Desc, 
+                                            "SUSPICIOUS CIRCUM. - SUSPICIOUS PERSON",
+                                            "SUSPICIOUS PERSON"),
+    Case_Type_Final_Desc = str_replace(Case_Type_Final_Desc, 
+                                            "ASSAULTS, OTHER",
+                                            "ASSAULTS"),
+    Case_Type_Final_Desc = str_replace(Case_Type_Final_Desc, 
+                                            "PERSON - RUNAWAY",
+                                            "RUNAWAY PERSON"),
+    case_type_final_desc_first = str_trim(str_extract(Case_Type_Final_Desc, "[^-]+")), 
+    case_type_final_desc_first = recode_factor(case_type_final_desc_first,
+                                     "TRESPASS, PARKS EXCLUSION" = "TRESPASS",
+                                     "CASUALTY,NON" = "CASUALTY NON CRIMINAL",
+                                     "#NAME?" = "UNKNOWN",
+                                     "UNKNOWN?" = "UNKNOWN",
+                                     "HAZ" = "HAZARDS",
+                                     "SEX OFFENSES (NON" = "SEX OFFENSES (NON RAPE)",
+                                     "MISSING" = "MISSING PERSON",
+                                     "PERSON" = "MISSING PERSON",
+                                     "HARAS" = "HARASSMENT",
+                                     "DOWN" = "DOWN PERSON",
+                                     "BURN" = "RECKLESS BURNING",
+                                     "SERVICE" = "WELFARE CHECK",
+                                     "WEAPN" = "WEAPON",
+                                     "WEAPON,PERSON WITH" = "WEAPON",
+                                     "WEAPON, PERSON WITH" = "WEAPON",
+                                     "CASUALTY NON" = "CASUALTY DRUG RELATED",
+                                     "DISTURBANCE, MISCELLANEOUS/OTHER" = "DISTURBANCE",
+                                     "NUISANCE" = "NUISANCE OR MISCHIEF",
+                                     "CHILD" = "ABANDONED, ABUSED AND NEGLECTED CHILD"
+                                     )) %>%
+  filter(case_type_final_desc_first %in% top_20_case_types_no_pols_action$case_type_final_desc_first) %>%
+  group_by(case_type_final_desc_first, no_police_action) %>%
+  count() %>% 
+  group_by(case_type_final_desc_first) %>%
+  mutate(percent = round((n/sum(n)) * 100, digits=2)) %>% 
+  filter(no_police_action != "OTHER RESOLUTION")
+
+
+ggplot(perc_no_police_action,
+       aes(x = percent,
+           y = reorder(case_type_final_desc_first, percent),
+           label = percent(percent, accuracy = 0.1, scale = 1, suffix = "%"))) +
+  geom_segment(aes(yend = case_type_final_desc_first), xend = 0, colour = "grey80") +
+  geom_point(size = 3, color = "purple", alpha=0.8) + 
+  geom_text(size = 2.7, fontface = "bold", nudge_x = 0.5) +  
+  labs(title = "Fig. 2: Percent of cases where police action was not possible or necessary",
+       x = "Percentage of Calls",
+       y = "",
+       caption = "Seattle, WA 2019") + 
+  scale_x_continuous(labels = scales::percent_format(accuracy = 0.1, scale = 1, suffix = "%"), 
+                     breaks=pretty_breaks(n = 10)) +
+  theme_bw() +
+  theme(
+  panel.grid.major.y = element_blank(),
+  axis.text.x = element_text(angle = 0, hjust = 0)
+)  
+
+```
+
+
+*Other Thoughts:*
+
+* Suspicious circumstances - Any interest in tracking this case type too? There may be fewer calls from this case than suspicious person, but it seems like a greater share of the suspicious circumstances are resolved in this way. Perhaps run comparisons between suspicious persons and circumstances spatially too. 
+* Prowler - Trespass and prowler also tend to mirror each other in tabulations. Tracking these two spatially may be useful too.
+
+
+## Where are the cases that were resolved in this manner located?
+
