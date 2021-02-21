@@ -1,18 +1,18 @@
 ---
 title: "Deep Dive on Clear By Description - No Police Action Possible or Necessary"
 author: "Francine Stephens"
-date: "Last Updated: `r format(Sys.time(), '%d %B, %Y')`"
+date: "Last Updated: `r format(Sys.time(), '%B %d, %Y')`"
 output:
   html_document:
     toc: true
     toc_float: true
     code_folding: hide
-    theme: united
-    highlight: tango
+    theme: flatly
+    highlight: espresso
 ---
 
 ```{r setup, include=F, warning=F, message=F}
-knitr::opts_chunk$set(echo=F)
+knitr::opts_chunk$set(echo=T)
 
 ## Libraries
 options(tidyverse.quiet = T)
@@ -66,14 +66,16 @@ proj <- 2285  # NAD 83 USft
 ```
 
 
-The set of descriptive and spatial analyses in this web-report is a follow up on the [preliminary exploratory analysis](https://francine-stephens.github.io/francinestephens.github.io/cad19_eda.html). We take a deeper dive into the cases that were resolved without police action and in particular were labeled as no police action possible or necessary. This report tackles two questions:
+The set of descriptive and spatial analyses in this web-report is a follow up on the [preliminary exploratory analysis](https://francine-stephens.github.io/francinestephens.github.io/cad19_eda.html). We take a deeper dive into the cases that had the clear by description "No police action possible or necessary." This report tackles two questions about this type of resolution, which will henceforth be abreviated as NPAPN:
 
-1) What types of cases were resolved without police action because it was not possible or necessary? 
-2) Where are the cases that were resolved in this manner located?
+1) What types of cases had the NPAPN resolution? 
+2) Where are the cases with NPAPN resolutions located?
 
-## What types of cases had the clear by description "no police action possible or necessary"?
+## What types of cases had the clear by description NPAPN?
 
-```{r cad data import, echo=F, warning=F, message=F, include=F}
+No police action was deemed possible or necessary for **19,290 calls.** There are **63 different types of cases** that had been deemed NPAPN. The full list of case types and their frequencies can be downloaded as an [Excel file](https://docs.google.com/spreadsheets/d/1hYHU6ADwO-XHV8gMm6WExEk0kjkYDeeuYlKvu3AX6EI/edit?usp=sharing). To keep the number of categories more manageable, I graphed the top 20 case types with this type of resolution below in the Figure 1.
+
+```{r cad data import, echo=T, warning=F, message=F, include=F}
 ## IMPORT CAD DATA AND REDUCE TO FOCAL CASE TYPES
 cad <- readRDS("cad_2019_data.rds")
 
@@ -176,12 +178,11 @@ seattle_proj <- seattle_sf %>%
 
 ```
 
-```{r pressure}
-## Reduce to no police action resolutions
+```{r pols actions set-up}
+## Reduce to no police action resolutions & export
 no_police_action <- cad %>%
   filter(Clear_By_Desc == "NO POLICE ACTION POSSIBLE OR NECESSARY")
 
-## EXPORT no police action case types
 no_police_action_case_types <- no_police_action %>% 
   group_by(Case_Type_Final_Desc) %>%
   summarize(freq = n()
@@ -189,6 +190,7 @@ no_police_action_case_types <- no_police_action %>%
   mutate(percent = round((freq/sum(freq)) * 100, digits=2)) %>%
   arrange(-freq)
 
+## Uncomment code below to export if changes are made
 # write_csv(no_police_action_case_types,
 #           "no_police_action_case_types.csv",
 #           na = "")
@@ -197,16 +199,15 @@ rm(no_police_action_case_types)
 
 ```
 
-No police action was deemed possible or necessary for *19,290 calls.* There are *63 different types of cases* that had been deemed impossible or unnecessary for police action to be taken. The full list of case types and their frequencies can be downloaded as an [Excel file](https://docs.google.com/spreadsheets/d/1hYHU6ADwO-XHV8gMm6WExEk0kjkYDeeuYlKvu3AX6EI/edit?usp=sharing). To keep the number of categories more manageable, I graphed the top 20 case types with this case resolution below in the Figure 1.
 
-**44% of all the calls about cases which were deemed as unable or unnecessary to resolve by police action were disturbance, suspicious person, and trespass calls.** 
+**Disturbance, suspicious person, and trespass calls made up 44% of all calls about cases that were deemed NPAPN.** 
 
 * Disturbance and suspicious person are the top 2 most common. Disturbance calls make up about 27% of these cases and suspicious person cases are 15%. 
 * Trespass cases are in the top 20, but rank lower than our other two focal cases at 9th most frequent. 
 * Traffic related cases and assisting the public were also among the top 5 most common cases.
 
 ```{r case type counts for no police action agg case type}
-## AGGREGATE case types for graphing
+## Aggregate case types for graphing
 no_police_action_case_freq <- no_police_action %>% 
   mutate(
          Case_Type_Final_Desc = str_replace(
@@ -263,9 +264,9 @@ no_police_action_case_freq %>%
   slice(1:20) %>%
  ggplot(., aes(x = n, y = reorder(case_type_final_desc_first, n), label = comma(n, accuracy=1))) +
   geom_segment(aes(yend = case_type_final_desc_first), xend = 0, colour = "grey80") +
-  geom_point(size = 7.5, color = "purple", alpha=0.8) + 
+  geom_point(size = 7.5, color = "mediumpurple", alpha=0.8) + 
   geom_text(size = 2, color = "white", fontface = "bold") +  
-  labs(title = "Fig. 1:Top 20 cases where police action was not possible or necessary",
+  labs(title = "Fig. 1: Top 20 cases with NPAPN Resolution",
        x = "# of Calls",
        y = "",
        caption = "Seattle, WA 2019") + 
@@ -276,27 +277,22 @@ no_police_action_case_freq %>%
   axis.text.x = element_text(angle = 45, hjust=1)
 )
 
-
-# Extract top 20 case type names
-top_20_case_types_no_pols_action <- no_police_action_case_freq %>%
-  slice(1:20) %>% 
-  select(case_type_final_desc_first)
-
 ```
 
 
-In addition to knowing the raw frequencies of cases that were resolved without police action due to police action being impossible or unnecessary, it is helpful to know what proportion of these case types were resolved in this manner. Figure 2 shows the breakdown of this type of resolution for the top 20 case types. 
+In addition to knowing the raw frequencies of cases that were deemed NPAPN, knowing the proportion of each type of case resolved in this manner would be informative. Figure 2 shows the breakdown of this type of resolution for the top 20 case types. 
 
-**The rankings shift when we consider the share of these top 20 cases in which police action was deemed not possible or necessary to resolve the case. Among these case types, no case type had more than 11% of the cases in 2019 that were classified as police action not being possible or necessary.**
+**The rankings shift when we consider the share of these top 20 cases deemed NPAPN. Among these case types, no case type had more than 11% of the cases in 2019 that were classified as NPAPN.**
 
 * Of all suspicious circumstances cases in 2019, just over 10% were resolved in this manner. 
 * The shares for Mischief/Nuisance and Animal Complaint were just under 10%. 
-* Police action was deemed impossible or unnecessary for approximately 6% of disturbance and suspicious persons cases.
-* Just over 3% of trespass cases were classified as police action not being possible or necessary.
+* For approximately 6% of disturbance and suspicious persons cases were classified as NPAPN.
+* Just over 3% of trespass cases were classified as NPAPN.
+* The top 10 case types in the graphic have shares of NPAPN resolved cases that are above the average for all case types that had NPAPN resolutions. 
 
 
 ```{r create lolliplot of percent resolved without police action, message=F, warning=F}
-## CREATE lolliplot of % resolved w/o police action
+## Create lolliplot of % resolved w/o police action
 # Extract top 20 case type names
 top_20_case_types_no_pols_action <- no_police_action_case_freq %>%
   slice(1:20) %>% 
@@ -354,40 +350,308 @@ perc_no_police_action <- cad %>%
                                      "CHILD" = "ABANDONED, ABUSED AND NEGLECTED CHILD"
                                      )) %>%
   filter(case_type_final_desc_first %in% top_20_case_types_no_pols_action$case_type_final_desc_first) %>%
-  group_by(case_type_final_desc_first, no_police_action) %>%
-  count() %>% 
+  count(case_type_final_desc_first, no_police_action) %>% 
   group_by(case_type_final_desc_first) %>%
-  mutate(percent = round((n/sum(n)) * 100, digits=2)) %>% 
+  mutate(percent = round((n/sum(n)) * 100, digits=2), 
+         above_average_pct = as.factor(if_else(percent > 3.65,
+                                               1,
+                                               0))) %>% 
   filter(no_police_action != "OTHER RESOLUTION")
 
+## Get summary stats of % NPAPN
+# pct_no_pols_action <- cad %>%
+#   mutate(no_police_action = as.factor(if_else(
+#     Clear_By_Desc == "NO POLICE ACTION POSSIBLE OR NECESSARY",
+#                                     1,
+#                                     0)),
+#     no_police_action = recode_factor(no_police_action,
+#                                           "0" = "OTHER RESOLUTION",
+#                                           "1" = "NO POLICE ACTION POSSIBLE OR NECESSARY"), 
+#     Case_Type_Final_Desc = str_replace(
+#     Case_Type_Final_Desc, c("PROWLER - TRESPASS", 
+#                                    "PROWLER - TRESPASS, PARKS EXCLUSION"), "TRESPASS"),
+#     Case_Type_Final_Desc = str_replace(
+#     Case_Type_Final_Desc, "DV - ARGUMENTS, DISTURBANCE (NO ARREST)", 
+#            "DISTURBANCE - DV"),
+#     Case_Type_Final_Desc = str_replace(Case_Type_Final_Desc, 
+#                                             "NOISE - DIST, GENERAL (CONST, RESID, BALL PLAY)",
+#                                             "DISTURBANCE - NOISE, GENERAL"),
+#     Case_Type_Final_Desc = str_replace(Case_Type_Final_Desc, 
+#                                             "NOISE - DISTURBANCE (PARTY, ETC)", 
+#                                             "DISTURBANCE - NOISE, GENERAL"),
+#     Case_Type_Final_Desc = str_replace(Case_Type_Final_Desc, 
+#                                             "SUSPICIOUS CIRCUM. - SUSPICIOUS PERSON",
+#                                             "SUSPICIOUS PERSON"),
+#     Case_Type_Final_Desc = str_replace(Case_Type_Final_Desc, 
+#                                             "ASSAULTS, OTHER",
+#                                             "ASSAULTS"),
+#     Case_Type_Final_Desc = str_replace(Case_Type_Final_Desc, 
+#                                             "PERSON - RUNAWAY",
+#                                             "RUNAWAY PERSON"),
+#     case_type_final_desc_first = str_trim(str_extract(Case_Type_Final_Desc, "[^-]+")), 
+#     case_type_final_desc_first = recode_factor(case_type_final_desc_first,
+#                                      "TRESPASS, PARKS EXCLUSION" = "TRESPASS",
+#                                      "CASUALTY,NON" = "CASUALTY NON CRIMINAL",
+#                                      "#NAME?" = "UNKNOWN",
+#                                      "UNKNOWN?" = "UNKNOWN",
+#                                      "HAZ" = "HAZARDS",
+#                                      "SEX OFFENSES (NON" = "SEX OFFENSES (NON RAPE)",
+#                                      "MISSING" = "MISSING PERSON",
+#                                      "PERSON" = "MISSING PERSON",
+#                                      "HARAS" = "HARASSMENT",
+#                                      "DOWN" = "DOWN PERSON",
+#                                      "BURN" = "RECKLESS BURNING",
+#                                      "SERVICE" = "WELFARE CHECK",
+#                                      "WEAPN" = "WEAPON",
+#                                      "WEAPON,PERSON WITH" = "WEAPON",
+#                                      "WEAPON, PERSON WITH" = "WEAPON",
+#                                      "CASUALTY NON" = "CASUALTY DRUG RELATED",
+#                                      "DISTURBANCE, MISCELLANEOUS/OTHER" = "DISTURBANCE",
+#                                      "NUISANCE" = "NUISANCE OR MISCHIEF",
+#                                      "CHILD" = "ABANDONED, ABUSED AND NEGLECTED CHILD"
+#                                      )) %>% 
+#   count(case_type_final_desc_first, no_police_action) %>% 
+#   group_by(case_type_final_desc_first) %>%
+#   mutate(percent = round((n/sum(n)) * 100, digits=2)) %>% 
+#   filter(no_police_action != "OTHER RESOLUTION") %>%
+#   select(-no_police_action) %>%
+#   ungroup() %>%
+#   summarize(avg_pct_no_pols_action = mean(percent, na.rm = T),
+#             sd_pct_no_pols_action = sd(percent, na.rm = T),
+#             med_pct_no_pols_action = median(percent),
+#             max_pct_no_pols_action = max(percent)
+#             )
 
+## Graph
 ggplot(perc_no_police_action,
        aes(x = percent,
            y = reorder(case_type_final_desc_first, percent),
            label = percent(percent, accuracy = 0.1, scale = 1, suffix = "%"))) +
   geom_segment(aes(yend = case_type_final_desc_first), xend = 0, colour = "grey80") +
-  geom_point(size = 3, color = "purple", alpha=0.8) + 
-  geom_text(size = 2.7, fontface = "bold", nudge_x = 0.5) +  
-  labs(title = "Fig. 2: Percent of cases where police action was not possible or necessary",
+  geom_point(size = 3, aes(color=factor(above_average_pct)), alpha=0.8) + 
+  geom_text(size = 2.7, fontface = "bold", nudge_x = 0.4) + 
+  annotate("text", x = 6.5, y = "NARCOTICS", label = "Above Average",
+           color = "#998ec3", size = 3, hjust = -0.1, vjust = .75) +
+  annotate("text", x = 6.5, y = "PROWLER", label = "Below Average",
+           color = "#f1a340", size = 3, hjust = -0.1, vjust = -.1) +
+  geom_segment(aes(x = 6.5, xend = 6.5 , y = "NARCOTICS", yend = "HAZARDS"),
+                     arrow = arrow(length = unit(0.2,"cm")), color = "#998ec3") +
+  geom_segment(aes(x = 6.5, xend = 6.5 , y = "PROWLER", yend = "CRISIS COMPLAINT"),
+                     arrow = arrow(length = unit(0.2,"cm")), color = "#f1a340") +
+  labs(title = "Fig. 2: Percent of cases with NPAPN Resolution",
        x = "Percentage of Calls",
        y = "",
+       subtitle = "The average percent of NPAPN resolutions among all case types was 3.6%.",
        caption = "Seattle, WA 2019") + 
   scale_x_continuous(labels = scales::percent_format(accuracy = 0.1, scale = 1, suffix = "%"), 
-                     breaks=pretty_breaks(n = 10)) +
+                     breaks=pretty_breaks(n = 10)) + 
+  scale_color_manual(values=c("#f1a340", "#998ec3")) +
   theme_bw() +
   theme(
+  legend.position = "none",
   panel.grid.major.y = element_blank(),
-  axis.text.x = element_text(angle = 0, hjust = 0)
+  axis.text.x = element_text(angle = 0)
 )  
 
 ```
 
 
-*Other Thoughts:*
+#### Additional Thoughts 
 
-* Suspicious circumstances - Any interest in tracking this case type too? There may be fewer calls from this case than suspicious person, but it seems like a greater share of the suspicious circumstances are resolved in this way. Perhaps run comparisons between suspicious persons and circumstances spatially too. 
-* Prowler - Trespass and prowler also tend to mirror each other in tabulations. Tracking these two spatially may be useful too.
+* **Suspicious circumstances** - Any interest in tracking this case type, too? There may be fewer calls from this case than suspicious person, but it seems like a greater share of the suspicious circumstances are resolved in this way. Perhaps run comparisons between suspicious persons and circumstances spatially too. 
+* **Prowler** - Trespass and prowler also tend to mirror each other in tabulations. Tracking these two spatially may be useful.
 
 
-## Where are the cases that were resolved in this manner located?
 
+## Where are the cases that were resolved by NPAPN located? {.tabset .tabset-fade}
+
+18,8447 calls about cases that had been resolved by NPAPN had valid geographic coordinates that could be mapped. These point locations have been mapped and aggregated to the Seattle Police Department's geographic units as well as a density raster grid constructed using 1/8th of a square mile areal units.
+
+```{r Create spatial obj NPAPN, echo=F, warning=F, message=F}
+## CREATE SPATIAL OBJECT OF ONLY CASES WITH VALID LAT/LNGS (FOR POINT MAP)
+no_police_action_pts_sf <- no_police_action %>%
+  filter(Dispatch_Blurred_Longitude != -1 | Dispatch_Blurred_Latitude != -1) %>% 
+  st_as_sf(coords=c("Dispatch_Blurred_Longitude", "Dispatch_Blurred_Latitude"),
+           crs=4326)
+
+```
+
+### By Precinct
+
+
+The precinct-level map shows that the cases resolved by NPAPN are largely in the north and west precincts. East and south precincts are in the middle of the distribution with about half the number of cases resolved by NPAPN compared to the north and west. The southwestern precinct has the fewest hovering around 2,000.
+
+*NOTE: NA precinct includes the harbor and northern and southern periphery of Seattle. Seattle Police Department does not explain why these areas (in particular the northern and southern areas) do not get assigned to a precinct, but get assigned to sectors and beats.*
+
+```{r precinct map of no police action, warning=F, message=F, echo=F}
+## CREATE PRECINCT VIABLE DATAFRAME FOR NO POLICE ACTION
+no_police_action_by_precinct <- no_police_action_pts_sf  %>%
+  st_join(.,
+          precincts_sf,
+          join = st_within) %>%
+  group_by(precinct) %>%
+  summarize(Calls = n()) %>%
+  st_set_geometry(NULL)
+  
+## MAP NO POLICE ACTION BY PRECINCTS
+no_police_precincts_sf <- precincts_sf %>%  
+  left_join(., no_police_action_by_precinct, by = c("precinct"))
+  
+precinct_pal_no_police_action <- colorNumeric(
+  palette = "Purples",
+  domain = no_police_precincts_sf$Calls
+)
+
+leaflet() %>%
+addTiles() %>% 
+addPolygons(
+    data = no_police_precincts_sf,
+    fillColor = ~precinct_pal_no_police_action(Calls),
+    color = "Black",
+    opacity = 0.5,
+    fillOpacity = 0.5,
+    weight = 1.5,
+    label = ~paste0(precinct, " - ",
+      format(Calls, big.mark = ","), " Calls")
+    ) %>% 
+addLegend(
+  data = no_police_precincts_sf,
+  pal = precinct_pal_no_police_action,
+  values = ~Calls,
+  title = "Service calls resolved<br>by NPAPN per precinct"
+  )
+
+```
+
+### By Sector
+
+*West Precinct*
+
+* Sector K lead all sectors in the number of calls resolved by NPAPN with 1,990 calls.
+  * Sector K is located in the southwestern edge of the west precinct and borders the south and southwest precincts. 
+* Just to norhwest of Sector K, Sector M had about half the number of calls resolved by NPAPN. 
+* All of the other sectors in the west precinct had just over 1,000 calls cleared by NPAPN. 
+
+*North Precinct*
+
+* Sector B in the north precinct had the next highest count of calls cleared by NPAPN at 1,884. 
+  * Like the west precinct's sectors, the other northern precinct sectors had around 1,000 calls cleared by NPAPN. 
+* Sector U had the fewest, which is where the University of Washington's campus is located. 
+
+*East, South, and Southwest Precincts*
+
+* The leading sector in the southern precinct is sector R with 1,135 calls cleared in this manner.
+* The leading sector in the southwestern precinct is sector W, which had 1,138 calls. 
+* The leading sector in the eastern precinct was sector E with 1,074 calls cleared by NPAPN. 
+
+
+```{r sector map of no police action, warning=F, message=F, echo=F}
+## CREATE SECTOR VIABLE DATAFRAME FOR NO POLICE ACTION
+no_police_action_by_sector <- no_police_action_pts_sf  %>%
+  st_join(.,
+          sectors_sf,
+          join = st_within) %>%
+  group_by(sector) %>%
+  summarize(Calls = n()) %>%
+  st_set_geometry(NULL)
+  
+## MAP NO POLICE ACTION BY PRECINCTS
+no_police_sectors_sf <- sectors_sf %>%  
+  left_join(., no_police_action_by_sector, by = c("sector")) %>%
+  filter(sector != "H")
+  
+sector_pal_no_police_action <- colorNumeric(
+  palette = "Purples",
+  domain = no_police_sectors_sf$Calls
+)
+
+leaflet() %>%
+addTiles() %>% 
+addPolygons(
+    data = no_police_sectors_sf,
+    fillColor = ~sector_pal_no_police_action(Calls),
+    color = "Black",
+    opacity = 0.5,
+    fillOpacity = 0.5,
+    weight = 1.5,
+    label = ~paste0("Sector ", sector, " - ",
+      format(Calls, big.mark = ","), " Calls")
+    ) %>% 
+addLegend(
+  data = no_police_sectors_sf,
+  pal = sector_pal_no_police_action,
+  values = ~Calls,
+  title = "Service calls resolved<br>by NPAPN per sector"
+  )
+
+```
+
+### By Beat
+
+*West Precinct*
+
+* Half of the NPAPN resolved calls in sector K occurred in Beat K3. Beat K3 had the highest number of NPAPN resolutions with 1,000. This beat includes the International District/Chinatown.
+* The next highest beat was also in sector K - K2 with 581 calls resolved by NPAPN. K2 is located just to the west of K1. 
+
+*North Precinct*
+
+* The beats along the southwestern end of the northern precinct, just to the north of the Washington Ship Canal, had the most calls resolved by NPAPN. B2 had 659, B3 had 649, and B1 had 576. These beats are to the west of University of Washington. They include Woodland Park and Zoo. 
+
+*Southwest Precinct*
+
+* Beats on the northwestern part of the southwestern precinct that are closest to the western portion of the harbor had the highest number of NPAPN resolved calls. W2 had 430 and W1 had 391. 
+
+*South Precinct*
+
+* Beat R2 stood out as the top beat for NPAPN in the south precinct with 492 calls. This beat encompasses the Mount Baker (neighborhood/area?).
+
+*East Precinct*
+
+* The E1 beat had 437 calls resolved by NPAPN - the highest number in the eastern precinct. This beat includes Capitol Hill. 
+* The other beats in the eastern precinct had considerably fewer NPAPN resolutions. 
+
+```{r beat map of no police action, warning=F, message=F, echo=F}
+## CREATE BEAT VIABLE DATAFRAME FOR NO POLICE ACTION
+no_police_action_by_beat <- no_police_action_pts_sf  %>%
+  st_join(.,
+          beats_sf,
+          join = st_within) %>%
+  group_by(beat) %>%
+  summarize(Calls = n()) %>%
+  st_set_geometry(NULL)
+  
+## MAP NO POLICE ACTION BY PRECINCTS
+no_police_beats_sf <- beats_sf %>%  
+  left_join(., no_police_action_by_beat, by = c("beat")) %>%
+  filter(!is.na(Calls))
+  
+beat_pal_no_police_action <- colorNumeric(
+  palette = "Purples",
+  domain = no_police_beats_sf$Calls
+)
+
+leaflet() %>%
+addTiles() %>% 
+addPolygons(
+    data = no_police_beats_sf,
+    fillColor = ~beat_pal_no_police_action(Calls),
+    color = "Black",
+    opacity = 0.5,
+    fillOpacity = 0.5,
+    weight = 1.5,
+    label = ~paste0("Beat ", beat, " - ",
+      format(Calls, big.mark = ","), " Calls")
+    ) %>% 
+addLegend(
+  data = no_police_beats_sf,
+  pal = beat_pal_no_police_action,
+  values = ~Calls,
+  title = "Service calls resolved<br>by NPAPN per beat"
+  )
+
+```
+
+### Point Density
+
+
+## Take-aways & Lingering Questions 
