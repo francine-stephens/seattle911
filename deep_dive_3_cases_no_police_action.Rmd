@@ -982,7 +982,6 @@ tres_resol_filter_sf <- trespass_sf %>%
 
 ## Cases where no police action was possible or necessary
 
-
 ```{r no police action by sector, warning=F, message=F}
 ## SP OBJECTS
 seattle_sp <- seattle_sf %>%
@@ -1038,6 +1037,10 @@ raster_no_pol_action = rasterize(no_police_action_pts_sp,
 
 kernel = focalWeight(raster_no_pol_action, d = 264, type = 'Gauss')
 heat = focal(raster_no_pol_action, kernel, fun = sum, na.rm=T)
+threshold = 0.15
+polygons = rasterToPolygons(x = heat, n=16, fun = function(x) { x >= threshold })
+contours = gBuffer(gUnaryUnion(polygons), width=100)
+
 
 plot(heat, main='Kernel Density of Cases Where No Police Action was Taken')
 plot(seattle_sp, border="gray", add=T)
@@ -1077,7 +1080,7 @@ col = palette[cut(getisgrid$HOTSPOT, breaks)]
 
 **Interactive Map of Getis-Ord GI Hot Spots**
 
-The hot spots (and few cold spots) are a little harder to see in an interactive map. They are more localized because I used a 1/8th square mile pixel grid in build the raster. Pan and Zoom in to the different beats to see where the "hot spots" are located (e.g., near parks, transit stations, etc.)
+The hot spots and few cold spots can be viewed in the interactive map. They are more localized because I used a 1/8th square mile pixel grid to build the raster. Pan and zoom in to the different beats to see where the "hot spots" are located (e.g., near parks, transit stations, etc.)
 ```{r leaflet the grid, warning=F, message=F}
 getisgrid <- spTransform(getisgrid, CRS("+init=epsg:4326"))
 no_pol_action_getis_pal <- 
@@ -1116,7 +1119,6 @@ leaflet() %>%
              "NA"),
   title = "Getis-Ord GI Hot-Spots of<br>No Police Action Resolutions") %>%
   setView(lng = -122.3321, lat = 47.6062, zoom = 11)
-
 
 ```
 
