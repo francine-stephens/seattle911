@@ -795,9 +795,10 @@ leaflet() %>%
 
 **Questions for next steps**
 
-* What is the interest motivating the "where" questions? Proximity to certain features? Density/Concentration? Distribution? Correlations amongst variables across space (e.g., demographics)? 
+* What is the interest motivating the "where" questions? Proximity to certain features? Density/Concentration? Distribution? Relationships between demographics and events? 
   * This should inform what types of units to use - census geography, rasters of different sizes.
 * Is there an interest in comparing the different cases resolved by NPAPN?
   * I did a quick multi-type point analysis, and the top 20 case types resolved by NPAPN listed above tend to be collocated. There was not any evidence of two case types being resolved this way tending to occur in different locations. 
   * Or, is there an interest in whether NPAPN co-occurs with other types of resolutions or is unique?
+* It is possible to drill down a little more and focus on particular beats or sectors and compute  additional local spatial statistics.
 
