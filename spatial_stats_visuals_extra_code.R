@@ -1,3 +1,10 @@
+## ZIP DENSITY
+# zips_all_cases_dens <- king_zips_proj %>%
+#   inner_join(., zips_in_extent, by = "ZIPCODE") %>%
+#   mutate(calls_per_sqmi = round(Calls/seattle_sqmi, digits = 2)) %>%
+#   select(ZIPCODE, case_type, Calls, calls_per_sqmi)
+
+
 ## SP OBJECTS
 seattle_sp <- seattle_sf %>%
   st_transform(., crs=proj) %>%
