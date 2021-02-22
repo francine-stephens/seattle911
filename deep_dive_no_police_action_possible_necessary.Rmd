@@ -26,11 +26,12 @@ packages <- c(
               "sp",
               "ggplot2",
               "ggmap",
-              "ggpubr",
               "maptools",
               "tmap",
               "raster",
+              "stars",
               "spatstat",
+              "rgeos",
               "plotly",
               "KernSmooth",
               "spdep",
@@ -40,7 +41,6 @@ packages <- c(
               "RColorBrewer", 
               "censusapi", 
               "tidycensus", 
-              "openxlsx",
               "units", 
               "mapboxapi"
               )
@@ -63,10 +63,11 @@ readRenviron("~/.Renviron")
 ## PARAMETERS
 wgs <- 4326
 proj <- 2285  # NAD 83 USft
+
 ```
 
 
-The set of descriptive and spatial analyses in this web-report is a follow up on the [preliminary exploratory analysis](https://francine-stephens.github.io/francinestephens.github.io/cad19_eda.html). We take a deeper dive into the cases that had the clear by description "No police action possible or necessary." This report tackles two questions about this type of resolution, which will henceforth be abreviated as NPAPN:
+The set of descriptive and spatial analyses in this web-report is a follow up on the [preliminary exploratory analysis](https://francine-stephens.github.io/francinestephens.github.io/cad19_eda.html). We take a deeper dive into the cases that had the clear by description "No police action possible or necessary." This web-report tackles two questions about this type of resolution, which I will refer to as NPAPN:
 
 1) What types of cases had the NPAPN resolution? 
 2) Where are the cases with NPAPN resolutions located?
@@ -175,6 +176,12 @@ seattle_proj <- seattle_sf %>%
   mutate(area_sqmi = st_area(.),
          area_sqmi = as.numeric(set_units(area_sqmi, mi^2))
   ) 
+
+
+## CREATE SP OBJECTS
+seattle_sp <- seattle_proj %>%
+  as(., "Spatial")
+seattle_Owin <- as.owin(seattle_sp) # SET WINDOW FOR DENSITY ANALYSIS
 
 ```
 
@@ -422,7 +429,7 @@ perc_no_police_action <- cad %>%
 #             max_pct_no_pols_action = max(percent)
 #             )
 
-## Graph
+## GRAPHIC
 ggplot(perc_no_police_action,
        aes(x = percent,
            y = reorder(case_type_final_desc_first, percent),
@@ -456,7 +463,7 @@ ggplot(perc_no_police_action,
 ```
 
 
-#### Additional Thoughts 
+#### CONSIDERATIONS FOR FUTURE ANALYSIS
 
 * **Suspicious circumstances** - Any interest in tracking this case type, too? There may be fewer calls from this case than suspicious person, but it seems like a greater share of the suspicious circumstances are resolved in this way. Perhaps run comparisons between suspicious persons and circumstances spatially too. 
 * **Prowler** - Trespass and prowler also tend to mirror each other in tabulations. Tracking these two spatially may be useful.
@@ -465,14 +472,25 @@ ggplot(perc_no_police_action,
 
 ## Where are the cases that were resolved by NPAPN located? {.tabset .tabset-fade}
 
-18,8447 calls about cases that had been resolved by NPAPN had valid geographic coordinates that could be mapped. These point locations have been mapped and aggregated to the Seattle Police Department's geographic units as well as a density raster grid constructed using 1/8th of a square mile areal units.
+18,8447 calls about cases that had been resolved by NPAPN had valid geographic coordinates for mapping. These point locations have been mapped and aggregated to the Seattle Police Department's geographic units as well as a density raster grid constructed using 1/8th of a square mile areal units.
 
 ```{r Create spatial obj NPAPN, echo=F, warning=F, message=F}
-## CREATE SPATIAL OBJECT OF ONLY CASES WITH VALID LAT/LNGS (FOR POINT MAP)
+## CREATE SPATIAL OBJECTS OF ONLY CASES WITH VALID LAT/LNGS (FOR POINT MAP)
 no_police_action_pts_sf <- no_police_action %>%
   filter(Dispatch_Blurred_Longitude != -1 | Dispatch_Blurred_Latitude != -1) %>% 
   st_as_sf(coords=c("Dispatch_Blurred_Longitude", "Dispatch_Blurred_Latitude"),
            crs=4326)
+
+no_police_action_pts_sf_proj <- st_transform(no_police_action_pts_sf, crs=proj)
+no_police_action_pts_coords_matrix <- matrix(unlist(no_police_action_pts_sf_proj$geometry),
+                                      ncol = 2,
+                                      byrow =T)
+no_police_action_pts_ppp <- ppp(x = no_police_action_pts_coords_matrix[, 1],
+                                y = no_police_action_pts_coords_matrix[, 2], 
+                                window = seattle_Owin,
+                                check = T)
+no_police_action_pts_sp <- no_police_action_pts_sf_proj %>%
+  as(., "Spatial")
 
 ```
 
@@ -529,7 +547,7 @@ addLegend(
 
 * Sector K lead all sectors in the number of calls resolved by NPAPN with 1,990 calls.
   * Sector K is located in the southwestern edge of the west precinct and borders the south and southwest precincts. 
-* Just to norhwest of Sector K, Sector M had about half the number of calls resolved by NPAPN. 
+* Just to northwest of Sector K, Sector M had about half the number of calls resolved by NPAPN. 
 * All of the other sectors in the west precinct had just over 1,000 calls cleared by NPAPN. 
 
 *North Precinct*
@@ -651,7 +669,135 @@ addLegend(
 
 ```
 
-### Point Density
 
+### Hot Spots
 
-## Take-aways & Lingering Questions 
+The interactive map below shows the NPAPN hot and cold spots. A raster grid was computed by dividing the city into one-eighth square mile regions and then aggregating the number of NPAPN resolutions within each region. The number of points per region was compared to the average of the region's contiguous neighbor regions. Each region was compared to a neighborhood of contiguous regions. If a region's number of NPAPN calls were significantly higher than the average NPAPN resolutions in its neighborhood, then the region is considered a hot spot. If a region's number of NPAPN calls was significantly lower than the average NPAPN resolutions in its neighborhood, then the region is considered a cold spot. 
+
+Pan and zoom in to the different beats to see where the "hot spots" are located (e.g., bounded by highways, near parks, transit stations, etc.)
+
+*West Precinct*
+
+* Most of sectors K and M, which are in the downtown area are classified as hot spots.
+* Lower Queen Anne neighborhood in beat Q3 near Key Arena has a sizeable patch of hot spots. 
+* The southern portion of Beat D3, near the beats in sectors K and M, also has some significant hot spots. 
+
+*North Precinct*
+
+* Hot spots in the north are scattered compared to those in the west which are localized in the core of the city. 
+* Parts of the University of Washington Campus in Beat U2 have hot spots. 
+* Beat B1 around the Ballard area has a patch of hot spots. 
+* In the far northern part of the precinct in Beat L3 around Lake City there is a prominent hot spot area. 
+* This precinct is the only one to contain cold spots. They are in beats B2, B3, U1, and U3
+
+*Southwest Precinct*
+
+* Hot spots are in the two beats with the highest number of NPAPN resolutions in the precinct - W2 and W1. 
+* W2 hot spots are around California Avenue between Oregon St and SW Edmunds St. 
+* W1 hot spots are in the Delridge neighborhood. There are hot spots the around the Puget Creek Green Space and near Cottage Grove Park. 
+
+*South Precinct*
+
+* Beat R2, which had the highest number of NPAPN resolutions in the south precinct, also had a patch of hot spots around York's Playground and Rainier Square Plaza. 
+
+*East Precinct*
+
+* The hot spots in the east precinct are adjacent to hot spots in the west precinct. They tend to be located near the Capitol Hill neighborhood (Sector E).
+
+```{r getis ord gi no police action, warning=F, message=F}
+## CALCULATE Getis- Ord GI statistic
+# Create a regular grid of 1/8-mile-square crime areas via a raster
+pixelsize = 660
+box = round(extent(seattle_sp) / pixelsize) * pixelsize
+template = raster(box, crs = proj,
+	nrows = (box@ymax - box@ymin) / pixelsize, 
+	ncols = (box@xmax - box@xmin) / pixelsize)
+
+no_police_action_pts_sp$PRESENT = 1
+getisraster = rasterize(no_police_action_pts_sp,
+                        template,
+                        field = 'PRESENT',
+                        fun = sum)
+getisgrid = rasterToPolygons(getisraster)
+
+# Create list of neighbors
+neighbors = poly2nb(getisgrid)
+weighted_neighbors = nb2listw(neighbors,
+                              zero.policy = T)
+
+# Perform local G analysis (Getis-Ord GI*)
+getisgrid$HOTSPOT = as.vector(localG(getisgrid$layer, weighted_neighbors))
+
+## UNCOMMENT TO COLOR GRID CELLS BASED ON Z SCORE & VIEW PLOT
+breaks = c(-30, -1.96, -1, 1, 1.96, 30)
+    # palette=c("#0000FF80", "#8080FF80", "#FFFFFF80", "#FF808080", "#FF000080")
+    # col = palette[cut(getisgrid$HOTSPOT, breaks)]
+
+    # plot(getisgrid, col=col, border=NA)
+    # plot(seattle_sp, border="gray", add=T)
+
+```
+
+```{r leaflet the grid, warning=F, message=F}
+## VISUALIZE LOCAL G - HOT SPOT MAP
+getisgrid <- spTransform(getisgrid, CRS("+init=epsg:4326"))
+no_pol_action_getis_pal <- 
+  colorBin(palette = c("#0000FF80",
+                       "#8080FF80",
+                       "#FFFFFF80",
+                       "#FF808080", 
+                       "#FF000080"),
+           bins=breaks,
+           na.color = "#808080")
+
+leaflet() %>%
+  addMapboxTiles(
+    style_id = "dark-v9",
+    username = "mapbox"
+  ) %>%
+  addPolygons(data = beats_sf,
+              fill = F, 
+              color = "white", 
+              weight = 1,
+              label = ~paste0("Beat ", beat)
+    ) %>%
+  addPolygons(data = getisgrid, 
+              color = ~no_pol_action_getis_pal(HOTSPOT),
+              stroke = F,
+              fillOpacity = 0.5,
+              smoothFactor = 0.5,
+  ) %>%
+  addLegend(data = getisgrid,
+  colors = c("#0000FF80", "#8080FF80", "#FFFFFF80", "#FF808080", "#FF000080", "#808080"),
+  labels = c("Cold Spot > 2 Std. Dev.", 
+             "Cold Spot 1 - 2 Std. Dev.", 
+             "Not Significant",
+             "Hot Spot  1 - 2 Std. Dev.", 
+             "Hot Spot > 2 Std. Dev.", 
+             "NA"),
+  title = "Getis-Ord GI* Hot-Spots<br>of NPAPN Resolutions") %>%
+  setView(lng = -122.3321, lat = 47.6062, zoom = 11)
+
+```
+
+## Takeaways & Lingering Questions
+
+**Top Lines**
+
+* Disturbance cases made up most of the NPAPN resolutions. 
+* Suspicious person cases are also a common case type with NPAPN resolutions. 
+* However, NPAPN resolutions made up only 6% of the resolutions for disturbance and suspicious persons cases.
+* Of the top 20 case types, about one-tenth of suspicious circumstances and mischief or nuisance cases in 2019 were resolved by NPAPN. 
+
+* Most NPAPN resolutions were in the northern precinct, followed by the western precinct. The three beats in Sector B in the north precincts were were most of the NPAPN resolutions occurred. In the western precinct, the two beats in Sector K at the southwestern edge of the precinct - K2 and K3 - are driving the high number of NPAPN resolutions.
+* The highest intensity of resolutions are in the western precinct in the beats/areas that make up of the downtown/city's core. 
+* There are hot spots in other precincts, but they don't really follow a pattern of being centrally or peripherally located.
+
+**Questions for next steps**
+
+* What is the interest motivating the "where" questions? Proximity to certain features? Density/Concentration? Distribution? Correlations amongst variables across space (e.g., demographics)? 
+  * This should inform what types of units to use - census geography, rasters of different sizes.
+* Is there an interest in comparing the different cases resolved by NPAPN?
+  * I did a quick multi-type point analysis, and the top 20 case types resolved by NPAPN listed above tend to be collocated. There was not any evidence of two case types being resolved this way tending to occur in different locations. 
+  * Or, is there an interest in whether NPAPN co-occurs with other types of resolutions or is unique?
+
