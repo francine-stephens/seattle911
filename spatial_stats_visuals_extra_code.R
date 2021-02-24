@@ -175,3 +175,55 @@ case_types_npapn_kfunction <- alltypes(no_police_action_pts_case_type_ppp,
                                        "Kcross",
                                        envelope = T)  #this takes awhile
 plot(case_types_npapn_kfunction)
+
+
+### EXTRA
+resol_suspicious_top5 <- focal_cases %>%
+  filter(case_type == "Suspicious Person") %>%
+  mutate(Clear_By_Desc = plyr::revalue(Clear_By_Desc, c("-"="NOT LISTED"))) %>%
+  count(Clear_By_Desc) %>% 
+  arrange(-n) %>%
+  slice(1:5)
+
+resol_trespass_top6 <- focal_cases %>%
+  filter(case_type == "Trespass") %>%
+  mutate(Clear_By_Desc = plyr::revalue(Clear_By_Desc, c("-"="NOT LISTED"))) %>%
+  count(Clear_By_Desc) %>% 
+  arrange(-n) %>%
+  slice(1:6)
+
+
+leaflet() %>%
+  addTiles() %>% 
+  addCircleMarkers(
+    data = arrest_dist_beats_sf,
+    radius = ~ sqrt(Calls),
+    stroke = FALSE,
+    fillOpacity = 0.5,
+    color = "red",
+    label = ~paste0("Beat ", beat, " - ", 
+                    format(Calls, big.mark = ","), " Arrests"),
+    group = "Arrest"
+  ) %>% 
+  addCircleMarkers(
+    data = report_dist_beats_sf,
+    radius = ~ sqrt(Calls),
+    stroke = FALSE,
+    fillOpacity = 0.5,
+    color = "red",
+    label = ~paste0("Beat ", beat, " - ", 
+                    format(Calls, big.mark = ","), " Report written"),
+    group = "Report Written"
+  ) %>%
+  addPolygons(
+    data = seattle_beats_sf,
+    fill = F, 
+    color = "black", 
+    weight = 1.5,
+    label = ~paste0("Beat ", beat)
+  ) %>%
+  addLayersControl(
+    overlayGroups = c("Arrest", "Report Written"),
+    position = "topright",
+    options = layersControlOptions(collapsed = F)
+  )
