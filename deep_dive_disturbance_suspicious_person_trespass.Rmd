@@ -1039,7 +1039,7 @@ focal_cases %>%
   geom_segment(aes(yend = Clear_By_Desc), xend = 0, colour = "grey80") +
   geom_point(size = 3, color = "red", alpha=0.6) + 
   geom_text(size = 2.5, vjust= -0.5, fontface = "bold") +  
-  labs(title = "Resolutions for Disturbance Cases",
+  labs(title = "Fig. 4.1: Resolutions for Disturbance Cases",
        x = "Calls",
        y = "",
        caption = "Seattle, WA 2019") + 
@@ -1063,7 +1063,7 @@ focal_cases %>%
   geom_segment(aes(yend = Clear_By_Desc), xend = 0, colour = "grey80") +
   geom_point(size = 3, color = "blue", alpha=0.6) + 
   geom_text(size = 2.5, vjust= -0.5, fontface = "bold") +  
-  labs(title = "Resolutions for Suspicious Person Cases",
+  labs(title = "Fig. 4.2: Resolutions for Suspicious Person Cases",
        x = "Calls",
        y = "",
        caption = "Seattle, WA 2019") + 
@@ -1086,7 +1086,7 @@ focal_cases %>%
   geom_segment(aes(yend = Clear_By_Desc), xend = 0, colour = "grey80") +
   geom_point(size = 3, color = "green", alpha=0.6) + 
   geom_text(size = 2.5, vjust= -0.5, fontface = "bold") +  
-  labs(title = "Resolutions for Trespass Cases",
+  labs(title = "Fig. 4.3: Resolutions for Trespass Cases",
        x = "Calls",
        y = "",
        caption = "Seattle, WA 2019") + 
@@ -1101,84 +1101,295 @@ focal_cases %>%
 
 
 
-## Does the type of resolution vary by location? 
+## Does the type of resolution vary by location? {.tabset .tabset-fade}
 
-Let's focus on the top-5 resolutions for these cases of interest (as well as the and no police action deemed necessary or possible for trespass, which falls just outside of the top 5). <span style="color: orange;">[ADD MULTITYPE POINT ANALYSIS BELOW]</span>
+Let's focus on the top-5 resolutions for these cases of interest (as well as the and no police action deemed necessary or possible for trespass, which falls just outside of the top 5).
 
-```{r parse out the top 5 resolution types for each case type}
-## Pull top 5 resolutions for different case types
-resol_dist_top5 <- focal_cases %>%
-  filter(case_type == "Disturbance") %>%
-  mutate(Clear_By_Desc = plyr::revalue(Clear_By_Desc, c("-"="NOT LISTED"))) %>%
-  count(Clear_By_Desc) %>% 
-  arrange(-n) %>%
-  slice(1:5)
+I started by conducting a multi-type point pattern analysis for each case type and the case resolutions. These analyses test whether the case resolutions are co-located or dispersed. We can answer questions like: Among trespassing cases, are physical arrests and no police action possible or necessary resolutions co-located or are they dispersed? The results for all three case types - disturbance, suspicious person, and trespassing - indicated that different the resolution types tend to be co-located. 
 
-resol_suspicious_top5 <- focal_cases %>%
-  filter(case_type == "Suspicious Person") %>%
-  mutate(Clear_By_Desc = plyr::revalue(Clear_By_Desc, c("-"="NOT LISTED"))) %>%
-  count(Clear_By_Desc) %>% 
-  arrange(-n) %>%
-  slice(1:5)
+**One reason for the co-location pattern is that the analysis was run "globally." Global statistical techniques compute statistics/patterns for the full spatial extent, which in this case was the whole city. It's possible that on average the different types of resolutions are more co-located or clustered than dispersed.** If we want to take more localized approaches, then we could run multi-type point pattern analyses on smaller geographic units, e.g., precincts, to see if within the precincts there are tendencies for certain resolutions to occur in one region of the precinct while other resolutions occur more commonly in another region.
 
-resol_trespass_top6 <- focal_cases %>%
-  filter(case_type == "Trespass") %>%
-  mutate(Clear_By_Desc = plyr::revalue(Clear_By_Desc, c("-"="NOT LISTED"))) %>%
-  count(Clear_By_Desc) %>% 
-  arrange(-n) %>%
-  slice(1:6)
+As a set-up to this, I have presented graphs and maps of the resolutions types aggregated to precincts and beats. Choropleth maps are not the best visual for count data, so we might want to go back and create rates of resolutions per population/area or just run the point pattern analysis at precinct by precinct. 
+
+### By Precinct 
+```{r disturbance parsed by precinct graphic, message=F, warning=F}
+## PRECINCT DISTURBANCE RESOLUTIONS GRAPHIC
+'%!in%' <- function(x,y)!('%in%'(x,y))
+
+not_resolutions <- c("NO SUCH ADDRESS OR LOCATION",
+                     "(NOT CURRENTLY USED) ALARM NO RESPONSE")
+
+resol_precinct_disturbance <- focal_cases_add_precinct_sf %>%
+  st_set_geometry(NULL) %>%
+  filter(case_type == "Disturbance" & 
+         Clear_By_Desc %!in% not_resolutions) %>%
+  mutate(Clear_By_Desc = plyr::revalue(
+    Clear_By_Desc, c("-"="NOT LISTED", 
+                     "INCIDENT LOCATED, PUBLIC ORDER RESTORED" = "PUBLIC ORDER RESTORED")
+    )) %>%
+  count(Clear_By_Desc, precinct) %>% 
+  rename(Calls = n) %>%
+  arrange(Clear_By_Desc, -Calls) %>%
+  filter(precinct != "NA")
+
+resol_dist_precinct_stacked <- resol_precinct_disturbance %>%
+  ggplot(. , aes(fill = precinct, y = Calls, x = Clear_By_Desc)) + 
+  geom_bar(position = "fill", stat = "identity") +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    x = "",
+    y = "Proportion of Calls",
+    title = "Fig. 5.1: Disturbance Resolutions",
+    fill = "",
+    caption = "Seattle, WA 2019"
+  ) +
+  coord_flip() + 
+  theme_classic() +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    axis.text.x = element_text(hjust=1)
+    )
   
-## DFs for case-resol top 5
-dist_resol_filter_sf <- disturbances_sf %>%
-  filter(Clear_By_Desc %in% resol_dist_top5$Clear_By_Desc) %>%
-  mutate(
-    Clear_By_Desc = plyr::revalue(Clear_By_Desc, 
-                                  c("NO POLICE ACTION POSSIBLE OR NECESSARY" = "NO POLICE ACTION",
-                                  "UNABLE TO LOCATE INCIDENT OR COMPLAINANT" = "UNABLE TO LOCATE",
-                                  "RESPONDING UNIT(S) CANCELLED BY RADIO" = "CANCELLED BY RADIO"))
-  )
-
-sus_resol_filter_sf <- suspicious_person_sf %>%
-    filter(Clear_By_Desc %in% resol_suspicious_top5$Clear_By_Desc) %>%
-      mutate(
-        Clear_By_Desc = plyr::revalue(Clear_By_Desc, 
-                                  c("NO POLICE ACTION POSSIBLE OR NECESSARY" = "NO POLICE ACTION",
-                                  "UNABLE TO LOCATE INCIDENT OR COMPLAINANT" = "UNABLE TO LOCATE"
-                                  ))
-      )
-
-tres_resol_filter_sf <- trespass_sf %>%
-    filter(Clear_By_Desc %in% resol_trespass_top6$Clear_By_Desc)  %>%
-      mutate(
-        Clear_By_Desc = plyr::revalue(Clear_By_Desc, 
-                                  c("NO POLICE ACTION POSSIBLE OR NECESSARY" = "NO POLICE ACTION",
-                                  "UNABLE TO LOCATE INCIDENT OR COMPLAINANT" = "UNABLE TO LOCATE"
-                                  ))
-      )
+resol_dist_precinct_stacked %>%
+  ggplotly() %>%
+  layout(
+    xaxis = list(fixedrange = T),
+    yaxis = list(fixedrange = T)
+  ) %>%
+  config(displayModeBar = F)
 
 ```
 
-```{r multitype plot disturbance, warning=F, message=F}
-# Multitype plot - DISTURBANCE
-disturbance_pts_top5resol_type_ppp <- dist_resol_filter_sf %>% 
-  st_transform(., crs=proj) %>%
-  select(Clear_By_Desc) %>% 
-  mutate(Clear_By_Desc = factor(Clear_By_Desc,
-                                levels = c("REPORT WRITTEN (NO ARREST)",
-                                           "NO POLICE ACTION", 
-                                           "ASSISTANCE RENDERED",
-                                           "UNABLE TO LOCATE",
-                                           "CANCELLED BY RADIO"))
-         ) %>%
-  as(., "Spatial") %>%
-  as(., "ppp")
+```{r suspicious person resol parsed by precinct, warning=F, message=F}
+## PRECINCT SUSPICIOUS PERSON RESOLUTIONS GRAPHIC
+resol_precinct_suspicious <- focal_cases_add_precinct_sf %>%
+  st_set_geometry(NULL) %>%
+  filter(case_type == "Suspicious Person" & 
+         Clear_By_Desc %!in% not_resolutions) %>%
+  mutate(Clear_By_Desc = plyr::revalue(
+    Clear_By_Desc, c("-"="NOT LISTED", 
+                     "INCIDENT LOCATED, PUBLIC ORDER RESTORED" = "PUBLIC ORDER RESTORED")
+    )) %>%
+  count(Clear_By_Desc, precinct) %>% 
+  rename(Calls = n) %>%
+  arrange(Clear_By_Desc, -Calls) %>%
+  filter(precinct != "NA")
 
-#plot(split(no_police_action_pts_case_type_ppp))
-
-case_types_npapn_kfunction <- alltypes(disturbance_pts_top5resol_type_ppp,
-                                       "Kcross",
-                                       envelope = T)  #this takes awhile
-plot(disturbance_pts_top5resol_type_ppp)
-
+resol_sus_precinct_stacked <- resol_precinct_suspicious %>%
+  ggplot(. , aes(fill = precinct, y = Calls, x = Clear_By_Desc)) + 
+  geom_bar(position = "fill", stat = "identity") +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    x = "",
+    y = "Proportion of Calls",
+    title = "Fig.5.2:Suspicious Person Resolutions",
+    fill = "",
+    caption = "Seattle, WA 2019"
+  ) +
+  coord_flip() + 
+  theme_classic() +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    axis.text.x = element_text(hjust=1)
+    )
+  
+resol_sus_precinct_stacked %>%
+  ggplotly() %>%
+  layout(
+    xaxis = list(fixedrange = T),
+    yaxis = list(fixedrange = T)
+  ) %>%
+  config(displayModeBar = F)
 
 ```
+
+```{r trespass resol parsed by precinct, warning=F, message=F}
+## PRECINCT TRESPASS RESOLUTIONS GRAPHIC
+resol_precinct_trespass <- focal_cases_add_precinct_sf %>%
+  st_set_geometry(NULL) %>%
+  filter(case_type == "Trespass" & 
+         Clear_By_Desc %!in% not_resolutions) %>%
+  mutate(Clear_By_Desc = plyr::revalue(
+    Clear_By_Desc, c("-"="NOT LISTED", 
+                     "INCIDENT LOCATED, PUBLIC ORDER RESTORED" = "PUBLIC ORDER RESTORED")
+    )) %>%
+  count(Clear_By_Desc, precinct) %>% 
+  rename(Calls = n) %>%
+  arrange(Clear_By_Desc, -Calls) %>%
+  filter(precinct != "NA")
+
+resol_trespass_precinct_stacked <- resol_precinct_trespass %>%
+  ggplot(. , aes(fill = precinct, y = Calls, x = Clear_By_Desc)) + 
+  geom_bar(position = "fill", stat = "identity") +
+  scale_fill_brewer(palette = "Set2") +
+  labs(
+    x = "",
+    y = "Proportion of Calls",
+    title = "Fig. 5.3: Trespass Case Resolutions",
+    fill = "",
+    caption = "Seattle, WA 2019"
+  ) +
+  coord_flip() + 
+  theme_classic() +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    axis.text.x = element_text(hjust=1)
+    )
+  
+resol_trespass_precinct_stacked %>%
+  ggplotly() %>%
+  layout(
+    xaxis = list(fixedrange = T),
+    yaxis = list(fixedrange = T)
+  ) %>%
+  config(displayModeBar = F)  
+
+```
+
+
+
+### By Beat
+```{r beat disturbance parsed map, message=F, warning=F}
+## Disturbances mapped
+resol_dist_top4 <- focal_cases %>%
+  filter(case_type == "Disturbance") %>%
+  mutate(Clear_By_Desc = plyr::revalue(Clear_By_Desc,
+                                       c("-"="NOT LISTED"))) %>%
+  count(Clear_By_Desc) %>% 
+  arrange(-n) %>%
+  slice(1:4)
+## full frame
+top4_resol_dist_beats <- focal_cases_pts_sf %>% 
+  filter(case_type == "Disturbance" & 
+         Clear_By_Desc %in% resol_dist_top4$Clear_By_Desc) %>% 
+  st_join(., seattle_beats_sf, join = st_within) %>%
+  st_set_geometry(NULL) %>%
+  group_by(beat, Clear_By_Desc) %>%
+  summarize(Calls = n())
+
+top4_resol_dist_beats_sf <- seattle_beats_sf %>%
+  right_join(., top4_resol_dist_beats, by = "beat") %>%
+#  st_centroid() %>%
+  rename(precinct = "first_prec") %>%
+  mutate(Clear_By_Desc = plyr::revalue(Clear_By_Desc,
+                                       c(
+                                         "NO POLICE ACTION POSSIBLE OR NECESSARY" = "NO POLICE ACTION",
+                                         "UNABLE TO LOCATE INCIDENT OR COMPLAINANT" = "UNABLE TO LOCATE",
+                                         "REPORT WRITTEN (NO ARREST)" = "REPORT WRITTEN"))) 
+ 
+  ggplot(data = top4_resol_dist_beats_sf) +
+  geom_sf(
+    #data = top4_resol_dist_beats_sf,
+    aes(fill = Calls)
+    )  + 
+    #scale_size_continuous(name = "Calls", trans = "identity") +
+    scale_fill_viridis_c(name = "Calls", direction = -1, trans = "identity", option = "magma") +
+  theme_void() + coord_sf() + 
+  guides(color = guide_legend()) + 
+   ggtitle("Disturbance Resolutions across Beats") + #+
+  theme(
+      legend.position = "bottom"
+      ) +
+      facet_wrap(.~Clear_By_Desc, nrow = 1) 
+
+```
+
+
+```{r suspicious person resolutions choro, warning=F, message=F}
+## SUSPICIOUS PERSON RESOLUTIONS MAPPED
+resol_sus_top4 <- focal_cases %>%
+  filter(case_type == "Suspicious Person") %>%
+  mutate(Clear_By_Desc = plyr::revalue(Clear_By_Desc,
+                                       c("-"="NOT LISTED"))) %>%
+  count(Clear_By_Desc) %>% 
+  arrange(-n) %>%
+  slice(1:4)
+
+## full frame
+top4_resol_sus_beats <- focal_cases_pts_sf %>% 
+  filter(case_type == "Suspicious Person" & 
+         Clear_By_Desc %in% resol_sus_top4$Clear_By_Desc) %>% 
+  st_join(., seattle_beats_sf, join = st_within) %>%
+  st_set_geometry(NULL) %>%
+  group_by(beat, Clear_By_Desc) %>%
+  summarize(Calls = n())
+
+top4_resol_sus_beats_sf <- seattle_beats_sf %>%
+  right_join(., top4_resol_sus_beats, by = "beat") %>%
+#  st_centroid() %>%
+  rename(precinct = "first_prec") %>%
+  mutate(Clear_By_Desc = plyr::revalue(Clear_By_Desc,
+                                       c(
+                                         "NO POLICE ACTION POSSIBLE OR NECESSARY" = "NO POLICE ACTION",
+                                         "UNABLE TO LOCATE INCIDENT OR COMPLAINANT" = "UNABLE TO LOCATE",
+                                         "REPORT WRITTEN (NO ARREST)" = "REPORT WRITTEN"))) 
+
+ ggplot(data = top4_resol_sus_beats_sf) +
+  geom_sf(
+    #data = top4_resol_dist_beats_sf,
+    aes(fill = Calls)
+    )  + 
+    #scale_size_continuous(name = "Calls", trans = "identity") +
+    scale_fill_viridis_c(name = "Calls", direction = -1, trans = "identity", option = "magma") +
+  theme_void() + coord_sf() + 
+  guides(color = guide_legend()) + 
+   ggtitle("Suspicious Person Resolutions across Beats") + #+
+  theme(legend.position = "bottom") +
+      facet_wrap(.~Clear_By_Desc, nrow = 1) 
+
+```
+
+```{r disturbances resolutions choro, warning=F, message=F}
+## Tresspass Resolutions mapped
+resol_tres_top4 <- focal_cases %>%
+  filter(case_type == "Trespass") %>%
+  mutate(Clear_By_Desc = plyr::revalue(Clear_By_Desc,
+                                       c("-"="NOT LISTED"))) %>%
+  count(Clear_By_Desc) %>% 
+  arrange(-n) %>%
+  slice(1:4)
+
+## full frame
+top4_resol_tres_beats <- focal_cases_pts_sf %>% 
+  filter(case_type == "Trespass" & 
+         Clear_By_Desc %in% resol_tres_top4$Clear_By_Desc) %>% 
+  st_join(., seattle_beats_sf, join = st_within) %>%
+  st_set_geometry(NULL) %>%
+  group_by(beat, Clear_By_Desc) %>%
+  summarize(Calls = n())
+
+top4_resol_tres_beats_sf <- seattle_beats_sf %>%
+  right_join(., top4_resol_tres_beats, by = "beat") %>%
+#  st_centroid() %>%
+  rename(precinct = "first_prec") %>%
+  mutate(Clear_By_Desc = plyr::revalue(Clear_By_Desc,
+                                       c(
+                                         "NO POLICE ACTION POSSIBLE OR NECESSARY" = "NO POLICE ACTION",
+                                         "UNABLE TO LOCATE INCIDENT OR COMPLAINANT" = "UNABLE TO LOCATE",
+                                         "REPORT WRITTEN (NO ARREST)" = "REPORT WRITTEN"))) 
+
+ ggplot(data = top4_resol_tres_beats_sf) +
+  geom_sf(
+    aes(fill = Calls)
+    )  + 
+    scale_fill_viridis_c(name = "Calls", direction = -1, trans = "identity",
+                         option = "magma") +
+   scale_colour_manual(values=NA) +
+   geom_sf(
+    data = seattle_beats_sf %>% filter(!is.na(first_prec) | sector != "H"),
+    fill = NA
+    ) +
+  theme_void() + coord_sf() + 
+  guides(color = guide_legend()) + 
+  ggtitle("Trespass Resolutions across Beats") + #+
+  theme(
+      legend.position = "bottom") +
+      facet_wrap(.~Clear_By_Desc, nrow = 1) 
+
+```
+
+
+
