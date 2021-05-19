@@ -1250,7 +1250,6 @@ resol_trespass_precinct_stacked %>%
 ```
 
 
-
 ### By Beat
 ```{r beat disturbance parsed map, message=F, warning=F}
 ## Disturbances mapped
@@ -1391,5 +1390,72 @@ top4_resol_tres_beats_sf <- seattle_beats_sf %>%
 
 ```
 
+```{r multitype test}
+# Multitype plot TEST 
+## PRECINCT WINDOWS 
+north_sp <- precincts_proj %>%
+  filter(precinct == "NORTH") %>%
+  as(., "Spatial")
+north_Owin <- as.owin(north_sp)
+
+plot(north_sp)
+
+trespass_north_pts_proj_sf <- focal_cases_pts_sf_proj %>%
+  filter(case_type == "Trespass") %>%
+  st_join(., precincts_proj, st_within) %>%
+  filter(precinct == "NORTH") %>%
+  select(Clear_By_Desc) %>%
+  mutate(Clear_By_Desc = factor(Clear_By_Desc, 
+                                levels = c("PHYSICAL ARREST MADE",
+                                           "REPORT WRITTEN (NO ARREST)",
+                                           "ORAL WARNING GIVEN",
+                                           "NO POLICE ACTION POSSIBLE OR NECESSARY",
+                                           "ASSISTANCE RENDERED",
+                                           "UNABLE TO LOCATE INCIDENT OR COMPLAINANT",
+                                           "DUPLICATED OR CANCELLED BY RADIO",
+                                           "PROBLEM SOLVING PROJECT",
+                                           "FOLLOW-UP REPORT MADE", 
+                                           "FALSE COMPLAINT/UNFOUNDED",
+                                           "CITATION ISSUED (CRIMINAL OR NON-CRIMINAL)",
+                                           "RESPONDING UNIT(S) CANCELLED BY RADIO", 
+                                           "STREET CHECK WRITTEN",
+                                           "OTHER REPORT MADE",
+                                           "-",
+                                           "INCIDENT LOCATED, PUBLIC ORDER RESTORED")
+                                ))
+
+trespass_north_pts_coords_matrix <- matrix(unlist(trespass_north_pts_proj_sf$geometry),
+                                             ncol = 2,
+                                             byrow =T)
+trespass_north_pts_ppp <- ppp(x = trespass_north_pts_coords_matrix[, 1],
+                              y = trespass_north_pts_coords_matrix[, 2], 
+                              window = north_Owin,
+                              marks = trespass_north_pts_proj_sf$Clear_By_Desc,
+                              check = T)
+
+c("PHYSICAL ARREST MADE", "REPORT WRITTEN (NO ARREST)", "ORAL WARNING GIVEN", "NO POLICE ACTION POSSIBLE OR NECESSARY", "ASSISTANCE RENDERED", "UNABLE TO LOCATE INCIDENT OR COMPLAINANT")
+trespass_north_resol_kfunction <- alltypes(trespass_north_pts_ppp, 
+                                           "Kcross", 
+                                           envelope = T)  #this takes awhile
+plot(density(split(trespass_north_pts_ppp)))
+plot(split(trespass_north_pts_ppp))
+plot(alltypes(trespass_north_pts_ppp,"K"))
+
+
+no_police_action_pts_case_type_sp <- no_police_action_pts_sf_proj %>%
+  select(case_type_final_desc_first) %>% 
+  filter(case_type_final_desc_first %in% six_focal_case_types_npapn) %>%
+  mutate(case_type_final_desc_first = as.factor(case_type_final_desc_first)) %>%
+  as(., "Spatial")
+
+no_police_action_pts_case_type_ppp <- as(no_police_action_pts_case_type_sp, "ppp")
+#plot(split(no_police_action_pts_case_type_ppp))
+
+case_types_npapn_kfunction <- alltypes(no_police_action_pts_case_type_ppp,
+                                       "Kcross",
+                                       envelope = T)  #this takes awhile
+plot(case_types_npapn_kfunction)
+
+```
 
 
